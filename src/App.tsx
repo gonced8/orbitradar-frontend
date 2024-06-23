@@ -1,35 +1,17 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// Add 'm-0 p-0' to the body style globally or use Tailwind's 'overflow-hidden' on the div if content overflow is the issue
 
-function App() {
-  const [count, setCount] = useState(0)
+import React from 'react';
+import World from './components/World';
 
+const App: React.FC = () => {
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <div className="w-full h-screen overflow-hidden bg-black">
+      <h1 className="text-white text-6xl font-bold text-center">
+        Orbit Radar
+      </h1>
+      <World />
+    </div>
+  );
+};
 
-export default App
+export default App;

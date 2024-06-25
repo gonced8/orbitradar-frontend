@@ -5,8 +5,8 @@ import World from './components/World';
 
 const App: React.FC = () => {
   return (
-    <div className="w-full h-screen overflow-hidden bg-black">
-      <h1 className="text-white text-6xl font-bold text-center">
+    <div className="w-full h-screen overflow-hidden bg-black relative">
+      <h1 className="absolute top-0 left-0 right-0 z-10 text-white text-6xl font-bold text-center drop-shadow-lg">
         Orbit Radar
       </h1>
       <World />

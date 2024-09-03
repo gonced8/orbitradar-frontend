@@ -1,6 +1,7 @@
 // Add 'm-0 p-0' to the body style globally or use Tailwind's 'overflow-hidden' on the div if content overflow is the issue
 
 import React from 'react';
+import CurrentDateTimeDisplay from './components/CurrentDateTimeDisplay';
 import World from './components/World';
 
 const App: React.FC = () => {
@@ -10,6 +11,7 @@ const App: React.FC = () => {
         Orbit Radar
       </h1>
       <World />
+      <CurrentDateTimeDisplay />
     </div>
   );
 };

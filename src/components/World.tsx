@@ -1,7 +1,9 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import * as THREE from 'three';
 import { GlobeMethods } from 'react-globe.gl';
+import axios from 'axios';
+import * as satellite from 'satellite.js';
 import { getUserLocation } from "../utils/geolocation";
 
 // Constants
@@ -9,7 +11,6 @@ const EARTH_RADIUS_KM = 6371; // km
 const SAT_SIZE = 200; // km
 const SAT_ALTITUDE = 10; // km
 const ORBIT_POINTS = 100; // Number of points in the orbit trajectory
-const PERIOD = 60000; // ms
 const CLICK_AREA_SIZE = 1000; // km
 
 interface UserLocation {
@@ -25,7 +26,27 @@ const World: React.FC = () => {
     const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
     const [satClicked, setSatClicked] = useState<boolean>(false);
     const [orbitPoints, setOrbitPoints] = useState<{ lat: number; lng: number; alt: number; }[]>([]);
-    const [initialTime] = useState(new Date().getTime());
+    const [tleSatrec, setTleSatrec] = useState<satellite.SatRec>();
+
+    // Fetch ISS TLE data from Celestrak on mount
+    useEffect(() => {
+        const catnr = 25544; // NORAD ID for ISS
+        const format = "TLE";
+
+        axios.get(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${catnr}&FORMAT=${format}`)
+            .then((response) => {
+                const tleData = response.data.split('\n');
+                const tleLine1 = tleData[1].trim();
+                const tleLine2 = tleData[2].trim();
+
+                // Create satellite record
+                const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
+                setTleSatrec(satrec);
+            })
+            .catch((error) => {
+                console.error('Error fetching TLE data:', error);
+            });
+    }, []);
 
     // Get user's geolocation
     useEffect(() => {
@@ -48,7 +69,7 @@ const World: React.FC = () => {
         }
     }, []);
 
-    // Time ticker
+    // Time ticker (60fps)
     useEffect(() => {
         const timer = setInterval(() => {
             setTime(new Date());
@@ -56,18 +77,27 @@ const World: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Satellite data
-    const satData = useMemo(() => {
-        const elapsedTime = time.getTime() - initialTime;
-        return [{
-            name: 'Satellite',
-            lat: 0,
-            lng: (elapsedTime % PERIOD) / PERIOD * 360,
-            alt: SAT_ALTITUDE * globeRadius / EARTH_RADIUS_KM,
-        }];
-    }, [globeRadius, time, initialTime]);
+    // Propagate ISS position
+    const issPosition = useMemo(() => {
+        if (!tleSatrec) return null;
 
-    // Satellite object
+        // Propagate the satellite's position using the current time
+        const positionAndVelocity = satellite.propagate(tleSatrec, time);
+        const positionEci = positionAndVelocity.position;
+
+        if (!positionEci) return null;
+
+        // Convert ECI coordinates to Geodetic coordinates (latitude, longitude, altitude)
+        const gmst = satellite.gstime(time);
+        const positionGd = satellite.eciToGeodetic(positionEci as satellite.EciVec3<number>, gmst);
+        const lat = satellite.degreesLat(positionGd.latitude);
+        const lng = satellite.degreesLong(positionGd.longitude);
+        const alt = positionGd.height;
+
+        return { lat, lng, alt: alt / EARTH_RADIUS_KM, name: "ISS" }; // Altitude in Earth radii for the globe visualization
+    }, [tleSatrec, time]);
+
+    // Satellite object (ISS)
     const satObject = useMemo(() => {
         if (!globeRadius) return undefined;
 
@@ -75,7 +105,7 @@ const World: React.FC = () => {
         const satGeometry = new THREE.OctahedronGeometry(SAT_SIZE * globeRadius / EARTH_RADIUS_KM / 2, 0);
         const satMaterial = new THREE.MeshLambertMaterial({ color: 'red', transparent: true, opacity: 0.7 });
         const satellite = new THREE.Mesh(satGeometry, satMaterial);
-        satellite.name = 'Satellite'; // Name the satellite for identification
+        satellite.name = 'ISS'; // Name the satellite for identification
 
         // Click area object
         const clickAreaGeometry = new THREE.SphereGeometry(CLICK_AREA_SIZE * globeRadius / EARTH_RADIUS_KM / 2, 32, 32);
@@ -91,28 +121,26 @@ const World: React.FC = () => {
     }, [globeRadius]);
 
     // Handle object click
-    const handleObjectClick = useCallback((obj: object) => {
-        console.log('Object clicked:', obj);
+    const handleObjectClick = (obj: object) => {
         const object = obj as THREE.Object3D;
-        if (object.name === 'Satellite') {
+        if (object.name === 'ISS') {
             setSatClicked(prev => !prev);
         }
-    }, []);
+    };
 
     // Generate orbit points
-    const generateOrbitPoints = useCallback((altitude: number, numPoints: number) => {
-        return Array.from({ length: numPoints }, (_, i) => ({
+    const generateOrbitPoints = useMemo(() => {
+        if (!tleSatrec) return [];
+        return Array.from({ length: ORBIT_POINTS }, (_, i) => ({
             lat: 0,
-            lng: i * 360 / (numPoints - 1),
-            alt: altitude
+            lng: i * 360 / (ORBIT_POINTS - 1),
+            alt: SAT_ALTITUDE * globeRadius / EARTH_RADIUS_KM
         }));
-    }, []);
+    }, [tleSatrec, globeRadius]);
 
-    // Set orbit points
     useEffect(() => {
-        const altitude = SAT_ALTITUDE * globeRadius / EARTH_RADIUS_KM;
-        setOrbitPoints(generateOrbitPoints(altitude, ORBIT_POINTS));
-    }, [globeRadius, generateOrbitPoints]);
+        setOrbitPoints(generateOrbitPoints);
+    }, [generateOrbitPoints, globeRadius]);
 
     return (
         <div>
@@ -131,8 +159,8 @@ const World: React.FC = () => {
                 labelsTransitionDuration={50}
                 labelColor={() => 'rgba(255, 165, 0, 0.75)'}
                 labelResolution={2}
-                // Satellites
-                objectsData={satData}
+                // ISS position
+                objectsData={issPosition ? [issPosition] : []}
                 objectLabel="name"
                 objectLat="lat"
                 objectLng="lng"

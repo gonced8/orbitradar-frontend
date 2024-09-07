@@ -12,6 +12,9 @@ const SAT_SIZE = 200; // km
 const CLICK_AREA_SIZE = 1000; // km
 const ORBIT_POINTS = 100; // Number of points in the orbit trajectory
 const FPS = 60;
+const CACHE_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+const TLE_STORAGE_KEY = 'iss_tle_data';
+const TLE_FETCH_TIMESTAMP_KEY = 'iss_tle_timestamp';
 
 interface UserLocation {
     lat: number;
@@ -29,30 +32,61 @@ const World: React.FC = () => {
     const [tleSatrec, setTleSatrec] = useState<satellite.SatRec>();
     const [issPeriodSeconds, setIssPeriodSeconds] = useState<number | null>(null); // Store the period in seconds
 
+    // Helper function to check if cached data is expired
+    const isCacheExpired = (timestamp: string | null): boolean => {
+        if (!timestamp) return true;
+        const fetchTime = new Date(timestamp).getTime();
+        return (Date.now() - fetchTime) > CACHE_DURATION_MS;
+    };
 
-    // Fetch ISS TLE data from Celestrak on mount
+    // Fetch ISS TLE data with caching
     useEffect(() => {
         const catnr = 25544; // NORAD ID for ISS
         const format = "TLE";
 
-        axios.get(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${catnr}&FORMAT=${format}`)
-            .then((response) => {
-                const tleData = response.data.split('\n');
-                const tleLine1 = tleData[1].trim();
-                const tleLine2 = tleData[2].trim();
+        // Check if we have cached data
+        const cachedTLE = localStorage.getItem(TLE_STORAGE_KEY);
+        const cachedTimestamp = localStorage.getItem(TLE_FETCH_TIMESTAMP_KEY);
 
-                // Create satellite record
-                const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-                setTleSatrec(satrec);
+        if (cachedTLE && !isCacheExpired(cachedTimestamp)) {
+            // Parse cached data and use it
+            const tleData = cachedTLE.split('\n');
+            const tleLine1 = tleData[0].trim();
+            const tleLine2 = tleData[1].trim();
 
-                // Calculate and store the ISS period in seconds
-                const meanMotion = satrec.no; // revolutions per minute
-                const periodSeconds = (2 * Math.PI) / meanMotion * 60; // seconds
-                setIssPeriodSeconds(periodSeconds);
-            })
-            .catch((error) => {
-                console.error('Error fetching TLE data:', error);
-            });
+            // Create satellite record
+            const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
+            setTleSatrec(satrec);
+
+            // Calculate and store the ISS period in seconds
+            const meanMotion = satrec.no; // revolutions per minute
+            const periodSeconds = (2 * Math.PI) / meanMotion * 60; // seconds
+            setIssPeriodSeconds(periodSeconds);
+        } else {
+            // Fetch fresh data and cache it
+            axios.get(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${catnr}&FORMAT=${format}`)
+                .then((response) => {
+                    const tleData = response.data.split('\n');
+                    const tleLine1 = tleData[1].trim();
+                    const tleLine2 = tleData[2].trim();
+
+                    // Cache the TLE data and timestamp
+                    localStorage.setItem(TLE_STORAGE_KEY, `${tleLine1}\n${tleLine2}`);
+                    localStorage.setItem(TLE_FETCH_TIMESTAMP_KEY, new Date().toISOString());
+
+                    // Create satellite record
+                    const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
+                    setTleSatrec(satrec);
+
+                    // Calculate and store the ISS period in seconds
+                    const meanMotion = satrec.no; // revolutions per minute
+                    const periodSeconds = (2 * Math.PI) / meanMotion * 60; // seconds
+                    setIssPeriodSeconds(periodSeconds);
+                })
+                .catch((error) => {
+                    console.error('Error fetching TLE data:', error);
+                });
+        }
     }, []);
 
 

@@ -9,9 +9,9 @@ import { getUserLocation } from "../utils/geolocation";
 // Constants
 const EARTH_RADIUS_KM = 6371; // km
 const SAT_SIZE = 200; // km
-const SAT_ALTITUDE = 10; // km
-const ORBIT_POINTS = 100; // Number of points in the orbit trajectory
 const CLICK_AREA_SIZE = 1000; // km
+const ORBIT_POINTS = 100; // Number of points in the orbit trajectory
+const FPS = 60;
 
 interface UserLocation {
     lat: number;
@@ -27,6 +27,8 @@ const World: React.FC = () => {
     const [satClicked, setSatClicked] = useState<boolean>(false);
     const [orbitPoints, setOrbitPoints] = useState<{ lat: number; lng: number; alt: number; }[]>([]);
     const [tleSatrec, setTleSatrec] = useState<satellite.SatRec>();
+    const [issPeriodSeconds, setIssPeriodSeconds] = useState<number | null>(null); // Store the period in seconds
+
 
     // Fetch ISS TLE data from Celestrak on mount
     useEffect(() => {
@@ -42,11 +44,17 @@ const World: React.FC = () => {
                 // Create satellite record
                 const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
                 setTleSatrec(satrec);
+
+                // Calculate and store the ISS period in seconds
+                const meanMotion = satrec.no; // revolutions per minute
+                const periodSeconds = (2 * Math.PI) / meanMotion * 60; // seconds
+                setIssPeriodSeconds(periodSeconds);
             })
             .catch((error) => {
                 console.error('Error fetching TLE data:', error);
             });
     }, []);
+
 
     // Get user's geolocation
     useEffect(() => {
@@ -69,11 +77,11 @@ const World: React.FC = () => {
         }
     }, []);
 
-    // Time ticker (60fps)
+    // Time ticker (fps)
     useEffect(() => {
         const timer = setInterval(() => {
             setTime(new Date());
-        }, 1000 / 60); // 60fps
+        }, 1000 / FPS);
         return () => clearInterval(timer);
     }, []);
 
@@ -96,6 +104,40 @@ const World: React.FC = () => {
 
         return { lat, lng, alt: alt / EARTH_RADIUS_KM, name: "ISS" }; // Altitude in Earth radii for the globe visualization
     }, [tleSatrec, time]);
+
+    // Generate orbit points centered around current ISS position
+    const generateOrbitPoints = useMemo(() => {
+        if (!tleSatrec || !issPeriodSeconds || !issPosition) return [];
+
+        const points = [];
+        const halfPeriodMs = issPeriodSeconds * 1000 / 2;
+        const stepMs = issPeriodSeconds * 1000 / ORBIT_POINTS;
+
+        // Iterate from -half period to +half period centered around the current satellite position
+        for (let i = -halfPeriodMs; i <= halfPeriodMs; i += stepMs) {
+            const propagationTime = new Date(time.getTime() + i);
+            const positionAndVelocity = satellite.propagate(tleSatrec, propagationTime);
+            const positionEci = positionAndVelocity.position;
+
+            if (!positionEci) continue;
+
+            const gmst = satellite.gstime(propagationTime);
+            const positionGd = satellite.eciToGeodetic(positionEci as satellite.EciVec3<number>, gmst);
+            const lat = satellite.degreesLat(positionGd.latitude);
+            const lng = satellite.degreesLong(positionGd.longitude);
+            const alt = positionGd.height;
+
+            points.push({ lat, lng, alt: alt / EARTH_RADIUS_KM });
+        }
+
+        return points;
+    }, [tleSatrec, issPeriodSeconds, issPosition, time]);
+
+    // Update orbit points when ISS position is updated
+    useEffect(() => {
+        setOrbitPoints(generateOrbitPoints);
+    }, [generateOrbitPoints]);
+
 
     // Satellite object (ISS)
     const satObject = useMemo(() => {
@@ -127,20 +169,6 @@ const World: React.FC = () => {
             setSatClicked(prev => !prev);
         }
     };
-
-    // Generate orbit points
-    const generateOrbitPoints = useMemo(() => {
-        if (!tleSatrec) return [];
-        return Array.from({ length: ORBIT_POINTS }, (_, i) => ({
-            lat: 0,
-            lng: i * 360 / (ORBIT_POINTS - 1),
-            alt: SAT_ALTITUDE * globeRadius / EARTH_RADIUS_KM
-        }));
-    }, [tleSatrec, globeRadius]);
-
-    useEffect(() => {
-        setOrbitPoints(generateOrbitPoints);
-    }, [generateOrbitPoints, globeRadius]);
 
     return (
         <div>

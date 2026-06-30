@@ -29,8 +29,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Default Pages URL: https://gonced8.github.io/orbitradar-frontend/
-          VITE_BASE: /orbitradar-frontend/
+          # Custom Pages URL: https://orbitradar.goncaloraposo.com/
+          VITE_BASE: /
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4

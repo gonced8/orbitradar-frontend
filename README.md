@@ -9,6 +9,7 @@ Orbit Radar is a React + TypeScript satellite tracker built with Vite, Tailwind 
 - 3D globe with efficiently merged satellite markers and a selected-satellite orbital ground track.
 - Search by satellite name or NORAD catalog ID.
 - Telemetry panel with latitude, longitude, altitude, and speed.
+- Collapsible mobile controls with visible loading, fallback, and network activity messages.
 - Optional selected-satellite camera follow mode.
 - Browser geolocation marker for the current user when permission is granted.
 
@@ -28,4 +29,4 @@ npm run dev
 
 ## Data source
 
-Orbital elements are fetched from the [CelesTrak](https://celestrak.org/) active-satellite group as one TLE catalog request. The browser caches the response for eight hours and falls back to stale cached data if CelesTrak is temporarily unavailable. This avoids making one request per satellite while allowing Orbit Radar to display every valid active object returned by the catalog.
+Orbital elements are fetched from the [CelesTrak](https://celestrak.org/) active-satellite group as one TLE catalog request. The browser caches the response for eight hours and falls back to stale cached data if CelesTrak is temporarily unavailable. On a first visit with no cache, Orbit Radar makes one fallback request for the smaller space-stations group so the globe can still show useful objects. This avoids making one request per satellite while allowing Orbit Radar to display every valid active object returned by the catalog.

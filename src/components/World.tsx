@@ -19,6 +19,9 @@ const SATELLITE_CACHE_TIMESTAMP_KEY =
   "orbitradar_active_satellite_timestamp_v2";
 const CELESTRAK_ACTIVE_URL =
   "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=TLE";
+const CELESTRAK_FALLBACK_URL =
+  "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=TLE";
+const FALLBACK_CACHE_DURATION_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_NORAD_ID = 25544;
 const SEARCH_RESULT_LIMIT = 12;
 
@@ -45,7 +48,21 @@ type SatellitePosition = OrbitPoint & {
   color: string;
 };
 
-type SatelliteCache = { satellites: SatelliteTle[] };
+type CatalogSource = "active" | "stations";
+type SatelliteCache = {
+  satellites: SatelliteTle[];
+  source?: CatalogSource;
+};
+type CacheResult = {
+  satellites: SatelliteTle[];
+  source: CatalogSource;
+};
+type ActivityMessage = {
+  id: number;
+  level: "info" | "success" | "warning" | "error";
+  text: string;
+  time: string;
+};
 
 const FEATURED_COLORS = new Map<number, string>([
   [25544, "#ff4d4f"], // ISS
@@ -65,10 +82,13 @@ const getSatelliteColor = (noradId: number, altitudeKm: number) => {
   return "#f9a8d4";
 };
 
-const isCacheFresh = (timestamp: string | null) => {
+const isCacheFresh = (
+  timestamp: string | null,
+  duration = CACHE_DURATION_MS,
+) => {
   if (!timestamp) return false;
   const cachedAt = Date.parse(timestamp);
-  return !Number.isNaN(cachedAt) && Date.now() - cachedAt < CACHE_DURATION_MS;
+  return !Number.isNaN(cachedAt) && Date.now() - cachedAt < duration;
 };
 
 const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
@@ -96,15 +116,19 @@ const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
   return catalog;
 };
 
-const readCache = (allowStale = false): SatelliteTle[] | null => {
+const readCache = (allowStale = false): CacheResult | null => {
   const value = localStorage.getItem(SATELLITE_CACHE_KEY);
   const timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
-  if (!value || (!allowStale && !isCacheFresh(timestamp))) return null;
+  if (!value) return null;
 
   try {
     const parsed = JSON.parse(value) as SatelliteCache;
+    const source = parsed.source ?? "active";
+    const duration =
+      source === "active" ? CACHE_DURATION_MS : FALLBACK_CACHE_DURATION_MS;
+    if (!allowStale && !isCacheFresh(timestamp, duration)) return null;
     return Array.isArray(parsed.satellites) && parsed.satellites.length > 0
-      ? parsed.satellites
+      ? { satellites: parsed.satellites, source }
       : null;
   } catch {
     localStorage.removeItem(SATELLITE_CACHE_KEY);
@@ -113,9 +137,12 @@ const readCache = (allowStale = false): SatelliteTle[] | null => {
   }
 };
 
-const writeCache = (satellites: SatelliteTle[]) => {
+const writeCache = (satellites: SatelliteTle[], source: CatalogSource) => {
   try {
-    localStorage.setItem(SATELLITE_CACHE_KEY, JSON.stringify({ satellites }));
+    localStorage.setItem(
+      SATELLITE_CACHE_KEY,
+      JSON.stringify({ satellites, source }),
+    );
     localStorage.setItem(
       SATELLITE_CACHE_TIMESTAMP_KEY,
       new Date().toISOString(),
@@ -136,6 +163,22 @@ const buildTrackedSatellite = (tle: SatelliteTle): TrackedSatellite | null => {
   };
 };
 
+const getRequestErrorMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 403) {
+      return "CelesTrak declined the request, usually because this catalog was downloaded too recently.";
+    }
+    if (error.response?.status) {
+      return `CelesTrak returned HTTP ${error.response.status}.`;
+    }
+    if (error.code === "ERR_NETWORK") {
+      return "The catalog request was blocked or the network is unavailable.";
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : "An unknown error occurred.";
+};
+
 const World: React.FC = () => {
   const globeEl = useRef<GlobeMethods | undefined>();
   const [time, setTime] = useState(new Date());
@@ -148,8 +191,34 @@ const World: React.FC = () => {
   const [followSelected, setFollowSelected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isPanelExpanded, setIsPanelExpanded] = useState(
+    () => window.matchMedia("(min-width: 640px)").matches,
+  );
+  const [activityMessages, setActivityMessages] = useState<ActivityMessage[]>([
+    {
+      id: 0,
+      level: "info",
+      text: "Checking the browser cache…",
+      time: new Date().toLocaleTimeString(),
+    },
+  ]);
   const [statusMessage, setStatusMessage] = useState(
     "Loading the active satellite catalog…",
+  );
+
+  const addActivity = useCallback(
+    (level: ActivityMessage["level"], text: string) => {
+      setActivityMessages((messages) => [
+        ...messages.slice(-4),
+        {
+          id: Date.now() + Math.random(),
+          level,
+          text,
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+    },
+    [],
   );
 
   const applyCatalog = useCallback(
@@ -161,51 +230,112 @@ const World: React.FC = () => {
       setStatusMessage(
         message.replace("{count}", tracked.length.toLocaleString()),
       );
+      addActivity(
+        "success",
+        `Prepared ${tracked.length.toLocaleString()} valid satellite orbits.`,
+      );
       setSelectedNoradId((current) =>
         tracked.some((item) => item.noradId === current)
           ? current
           : (tracked[0]?.noradId ?? DEFAULT_NORAD_ID),
       );
     },
-    [],
+    [addActivity],
   );
 
-  useEffect(() => {
-    const cached = readCache();
-    if (cached) {
-      applyCatalog(cached, "Tracking {count} active satellites from cache.");
-      setIsLoading(false);
-      return;
-    }
+  const loadCatalog = useCallback(
+    async (forceRefresh = false) => {
+      setIsLoading(true);
+      if (!forceRefresh) {
+        const cached = readCache();
+        if (cached) {
+          const label =
+            cached.source === "active" ? "active satellites" : "space stations";
+          addActivity(
+            "info",
+            `Found a fresh ${label} catalog in this browser.`,
+          );
+          applyCatalog(
+            cached.satellites,
+            cached.source === "active"
+              ? "Tracking {count} active satellites from cache."
+              : "Tracking {count} space stations from the fallback cache.",
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
 
-    // One bulk request replaces thousands of per-satellite requests and is kind
-    // to CelesTrak's rate limits. The result is cached for eight hours.
-    axios
-      .get<string>(CELESTRAK_ACTIVE_URL)
-      .then((response) => {
+      addActivity("info", "Requesting the active catalog once from CelesTrak…");
+      setStatusMessage("Downloading the active satellite catalog…");
+
+      try {
+        // One bulk request replaces thousands of per-satellite requests. Its
+        // eight-hour cache is much longer than CelesTrak's refresh interval.
+        const response = await axios.get<string>(CELESTRAK_ACTIVE_URL);
         const catalog = parseTleCatalog(response.data);
-        writeCache(catalog);
+        writeCache(catalog, "active");
         applyCatalog(
           catalog,
           "Tracking {count} active satellites from CelesTrak.",
         );
-      })
-      .catch((error) => {
-        console.error("Error fetching active satellite catalog:", error);
+        addActivity("success", "The active catalog was downloaded and cached.");
+      } catch (activeError) {
+        console.error("Error fetching active satellite catalog:", activeError);
+        const detail = getRequestErrorMessage(activeError);
+        addActivity("warning", `Active catalog failed: ${detail}`);
+
         const staleCache = readCache(true);
         if (staleCache) {
           applyCatalog(
-            staleCache,
-            "CelesTrak is unavailable; tracking {count} satellites from stale cache.",
+            staleCache.satellites,
+            "Using {count} satellites from an older cache while CelesTrak is unavailable.",
+          );
+          addActivity(
+            "warning",
+            "Using older saved data instead of showing an empty globe.",
           );
         } else {
           setStatusMessage(
-            "Unable to load the satellite catalog. Check your connection and refresh.",
+            "The active catalog failed. Trying the smaller space-stations catalog…",
           );
+          addActivity(
+            "info",
+            "No saved catalog exists. Trying the smaller space-stations group once…",
+          );
+          try {
+            const fallbackResponse = await axios.get<string>(
+              CELESTRAK_FALLBACK_URL,
+            );
+            const fallbackCatalog = parseTleCatalog(fallbackResponse.data);
+            writeCache(fallbackCatalog, "stations");
+            applyCatalog(
+              fallbackCatalog,
+              "Active catalog unavailable; showing {count} space stations.",
+            );
+            addActivity(
+              "warning",
+              "Loaded the space-stations fallback. The full catalog will be retried later.",
+            );
+          } catch (fallbackError) {
+            console.error("Error fetching fallback catalog:", fallbackError);
+            const fallbackDetail = getRequestErrorMessage(fallbackError);
+            setStatusMessage(
+              "No satellite data could be loaded. Expand Activity for details, then retry later.",
+            );
+            addActivity("error", `Fallback failed: ${fallbackDetail}`);
+          }
         }
-      })
-      .finally(() => setIsLoading(false));
-  }, [applyCatalog]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [addActivity, applyCatalog],
+  );
+
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
 
   useEffect(() => {
     const timer = window.setInterval(
@@ -220,19 +350,22 @@ const World: React.FC = () => {
   }, []);
 
   const locateUser = useCallback(() => {
+    addActivity("info", "Requesting location permission…");
     getUserLocation()
       .then((location) => {
         const point = { ...location, name: "You" };
         setUserLocation(point);
         globeEl.current?.pointOfView({ ...point, altitude: 2.4 }, 1000);
+        addActivity("success", "Your location marker is now visible.");
       })
       .catch((error) => {
         console.error("Error getting user location:", error);
         setStatusMessage(
           "Location unavailable. Satellite tracking is still active.",
         );
+        addActivity("warning", String(error));
       });
-  }, []);
+  }, [addActivity]);
 
   const satellitePositions = useMemo<SatellitePosition[]>(() => {
     const gmst = satellite.gstime(time);
@@ -372,91 +505,164 @@ const World: React.FC = () => {
         pathTransitionDuration={0}
       />
 
-      <aside className="absolute left-4 top-24 z-20 max-h-[calc(100vh-7rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/80 p-4 text-left text-white shadow-2xl backdrop-blur-md">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
-          Active catalog
-        </p>
-        <h2 className="mt-1 text-2xl font-bold">Satellite Tracker</h2>
-        <p className="mt-2 text-sm text-slate-300">{statusMessage}</p>
-
-        <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Find by name or NORAD ID
-          <input
-            className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm font-normal normal-case tracking-normal text-white outline-none placeholder:text-slate-500 focus:border-cyan-300"
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="e.g. Starlink, Hubble, 25544"
-            type="search"
-            value={searchQuery}
-          />
-        </label>
-
-        {searchResults.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {searchResults.map((item) => (
-              <button
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                  item.noradId === selectedNoradId
-                    ? "bg-cyan-300/20 text-cyan-100"
-                    : "bg-white/5 hover:bg-white/10"
-                }`}
-                key={item.noradId}
-                onClick={() => selectSatellite(item.noradId)}
-                type="button"
-              >
-                <span className="truncate font-medium">{item.name}</span>
-                <span className="ml-2 shrink-0 text-xs text-slate-400">
-                  {item.noradId}
-                </span>
-              </button>
-            ))}
+      <aside className="absolute inset-x-3 bottom-3 z-20 max-h-[58vh] overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/90 p-3 text-left text-white shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-4 sm:right-auto sm:top-24 sm:max-h-[calc(100vh-7rem)] sm:w-96 sm:p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.25em] text-cyan-300">
+              Active catalog
+            </p>
+            <h2 className="truncate text-lg font-bold sm:text-2xl">
+              {trackedSatellites.length > 0
+                ? `${trackedSatellites.length.toLocaleString()} satellites`
+                : "Satellite Tracker"}
+            </h2>
           </div>
-        )}
-
-        <h3 className="mt-4 truncate text-lg font-bold">
-          {selectedPosition?.name ?? "Select a satellite"}
-        </h3>
-        {selectedPosition && (
-          <p className="text-xs text-slate-400">
-            NORAD {selectedPosition.noradId}
-          </p>
-        )}
-
-        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <Telemetry label="Latitude">
-            {selectedPosition
-              ? formatCoordinate(selectedPosition.lat, "N", "S")
-              : "—"}
-          </Telemetry>
-          <Telemetry label="Longitude">
-            {selectedPosition
-              ? formatCoordinate(selectedPosition.lng, "E", "W")
-              : "—"}
-          </Telemetry>
-          <Telemetry label="Altitude">
-            {selectedPosition
-              ? `${selectedPosition.altitudeKm.toFixed(0)} km`
-              : "—"}
-          </Telemetry>
-          <Telemetry label="Speed">
-            {selectedPosition?.velocityKph
-              ? `${selectedPosition.velocityKph.toLocaleString(undefined, { maximumFractionDigits: 0 })} km/h`
-              : "—"}
-          </Telemetry>
-        </dl>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <ControlButton onClick={() => setFollowSelected((value) => !value)}>
-            {followSelected ? "Stop following" : "Follow selected"}
-          </ControlButton>
-          <ControlButton onClick={() => setShowOrbit((value) => !value)}>
-            {showOrbit ? "Hide orbit" : "Show orbit"}
-          </ControlButton>
-          <ControlButton onClick={locateUser}>Locate me</ControlButton>
+          <button
+            aria-expanded={isPanelExpanded}
+            className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/20 sm:px-4"
+            onClick={() => setIsPanelExpanded((expanded) => !expanded)}
+            type="button"
+          >
+            {isPanelExpanded ? "Hide panel" : "Open panel"}
+          </button>
         </div>
-        {isLoading && (
-          <p className="mt-3 text-xs text-slate-400">
-            Fetching one bulk catalog from CelesTrak…
-          </p>
+        <p
+          className={`mt-1 text-xs ${
+            activityMessages[activityMessages.length - 1]?.level === "error"
+              ? "text-red-300"
+              : isLoading
+                ? "text-cyan-200"
+                : "text-slate-300"
+          }`}
+          role="status"
+        >
+          {isLoading ? "Loading: " : ""}
+          {statusMessage}
+        </p>
+
+        {isPanelExpanded && (
+          <div>
+            <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Find by name or NORAD ID
+              <input
+                className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm font-normal normal-case tracking-normal text-white outline-none placeholder:text-slate-500 focus:border-cyan-300"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="e.g. Starlink, Hubble, 25544"
+                type="search"
+                value={searchQuery}
+              />
+            </label>
+
+            {searchResults.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {searchResults.map((item) => (
+                  <button
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                      item.noradId === selectedNoradId
+                        ? "bg-cyan-300/20 text-cyan-100"
+                        : "bg-white/5 hover:bg-white/10"
+                    }`}
+                    key={item.noradId}
+                    onClick={() => selectSatellite(item.noradId)}
+                    type="button"
+                  >
+                    <span className="truncate font-medium">{item.name}</span>
+                    <span className="ml-2 shrink-0 text-xs text-slate-400">
+                      {item.noradId}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <h3 className="mt-4 truncate text-lg font-bold">
+              {selectedPosition?.name ?? "Select a satellite"}
+            </h3>
+            {selectedPosition && (
+              <p className="text-xs text-slate-400">
+                NORAD {selectedPosition.noradId}
+              </p>
+            )}
+
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <Telemetry label="Latitude">
+                {selectedPosition
+                  ? formatCoordinate(selectedPosition.lat, "N", "S")
+                  : "—"}
+              </Telemetry>
+              <Telemetry label="Longitude">
+                {selectedPosition
+                  ? formatCoordinate(selectedPosition.lng, "E", "W")
+                  : "—"}
+              </Telemetry>
+              <Telemetry label="Altitude">
+                {selectedPosition
+                  ? `${selectedPosition.altitudeKm.toFixed(0)} km`
+                  : "—"}
+              </Telemetry>
+              <Telemetry label="Speed">
+                {selectedPosition?.velocityKph
+                  ? `${selectedPosition.velocityKph.toLocaleString(undefined, { maximumFractionDigits: 0 })} km/h`
+                  : "—"}
+              </Telemetry>
+            </dl>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <ControlButton
+                onClick={() => setFollowSelected((value) => !value)}
+              >
+                {followSelected ? "Stop following" : "Follow selected"}
+              </ControlButton>
+              <ControlButton onClick={() => setShowOrbit((value) => !value)}>
+                {showOrbit ? "Hide orbit" : "Show orbit"}
+              </ControlButton>
+              <ControlButton onClick={locateUser}>Locate me</ControlButton>
+              <ControlButton
+                disabled={isLoading}
+                onClick={() => void loadCatalog(true)}
+              >
+                {isLoading ? "Loading…" : "Retry catalog"}
+              </ControlButton>
+            </div>
+
+            <section
+              aria-label="Catalog activity"
+              className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3"
+            >
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Activity
+              </h3>
+              <ol className="mt-2 space-y-2">
+                {activityMessages.map((message) => (
+                  <li className="flex gap-2 text-xs" key={message.id}>
+                    <span
+                      aria-hidden="true"
+                      className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                        message.level === "error"
+                          ? "bg-red-400"
+                          : message.level === "warning"
+                            ? "bg-amber-300"
+                            : message.level === "success"
+                              ? "bg-emerald-300"
+                              : "bg-cyan-300"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1 text-slate-300">
+                      {message.text}
+                    </span>
+                    <time className="shrink-0 text-slate-500">
+                      {message.time}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            </section>
+            {isLoading && (
+              <p className="mt-3 text-xs text-slate-400">
+                Fetching one bulk catalog from CelesTrak…
+              </p>
+            )}
+          </div>
         )}
       </aside>
     </div>
@@ -478,13 +684,16 @@ const Telemetry = ({
 
 const ControlButton = ({
   children,
+  disabled = false,
   onClick,
 }: {
   children: React.ReactNode;
+  disabled?: boolean;
   onClick: () => void;
 }) => (
   <button
-    className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20"
+    className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+    disabled={disabled}
     onClick={onClick}
     type="button"
   >

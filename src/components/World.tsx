@@ -1,286 +1,606 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
-import Globe from "react-globe.gl";
-import * as THREE from "three";
-import { GlobeMethods } from "react-globe.gl";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import axios from "axios";
+import Globe, { GlobeMethods } from "react-globe.gl";
 import * as satellite from "satellite.js";
 import { getUserLocation } from "../utils/geolocation";
 
-// Constants
-const EARTH_RADIUS_KM = 6371; // km
-const SAT_SIZE = 200; // km
-const CLICK_AREA_SIZE = 1000; // km
-const ORBIT_POINTS = 100; // Number of points in the orbit trajectory
-const FPS = 60;
-const CACHE_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
-const TLE_STORAGE_KEY = "iss_tle_data";
-const TLE_FETCH_TIMESTAMP_KEY = "iss_tle_timestamp";
+const EARTH_RADIUS_KM = 6371;
+const ORBIT_POINTS = 100;
+const POSITION_TICK_MS = 5000;
+const CACHE_DURATION_MS = 8 * 60 * 60 * 1000;
+const SATELLITE_CACHE_KEY = "orbitradar_active_satellite_tles_v2";
+const SATELLITE_CACHE_TIMESTAMP_KEY =
+  "orbitradar_active_satellite_timestamp_v2";
+const CELESTRAK_ACTIVE_URL =
+  "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=TLE";
+const DEFAULT_NORAD_ID = 25544;
+const SEARCH_RESULT_LIMIT = 12;
+const CATALOG_PAGE_SIZE = 50;
+// Globe points are radial cylinders, so real orbital altitude looks like a line.
+// Keep dot markers near the surface and show true altitude in telemetry instead.
+const MARKER_ALTITUDE = 0.008;
 
-interface UserLocation {
-  lat: number;
-  lng: number;
+type LocationPoint = { lat: number; lng: number; name: string };
+type OrbitPoint = { lat: number; lng: number; alt: number };
+
+type SatelliteTle = {
+  noradId: number;
   name: string;
-}
+  line1: string;
+  line2: string;
+};
+
+type TrackedSatellite = SatelliteTle & {
+  satrec: satellite.SatRec;
+  periodSeconds: number;
+};
+
+type SatellitePosition = OrbitPoint & {
+  noradId: number;
+  name: string;
+  altitudeKm: number;
+  velocityKph: number | null;
+  color: string;
+};
+
+type SatelliteCache = { satellites: SatelliteTle[] };
+
+const FEATURED_COLORS = new Map<number, string>([
+  [25544, "#ff4d4f"], // ISS
+  [20580, "#7dd3fc"], // Hubble
+  [25994, "#34d399"], // Terra
+  [33591, "#fbbf24"], // NOAA 19
+]);
+
+const formatCoordinate = (value: number, positive: string, negative: string) =>
+  `${Math.abs(value).toFixed(2)}° ${value >= 0 ? positive : negative}`;
+
+const getSatelliteColor = (noradId: number, altitudeKm: number) => {
+  const featuredColor = FEATURED_COLORS.get(noradId);
+  if (featuredColor) return featuredColor;
+  if (altitudeKm < 2000) return "#67e8f9";
+  if (altitudeKm < 20000) return "#a78bfa";
+  return "#f9a8d4";
+};
+
+const isCacheFresh = (timestamp: string | null) => {
+  if (!timestamp) return false;
+  const cachedAt = Date.parse(timestamp);
+  return !Number.isNaN(cachedAt) && Date.now() - cachedAt < CACHE_DURATION_MS;
+};
+
+const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
+  const lines = rawTle
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const catalog: SatelliteTle[] = [];
+
+  for (let index = 0; index < lines.length - 2; index += 1) {
+    const name = lines[index];
+    const line1 = lines[index + 1];
+    const line2 = lines[index + 2];
+    if (!line1.startsWith("1 ") || !line2.startsWith("2 ")) continue;
+
+    const noradId = Number.parseInt(line1.slice(2, 7).trim(), 10);
+    if (!Number.isFinite(noradId)) continue;
+    catalog.push({ noradId, name, line1, line2 });
+    index += 2;
+  }
+
+  if (catalog.length === 0) {
+    throw new Error("CelesTrak returned an unexpected TLE catalog.");
+  }
+  return catalog;
+};
+
+const readCache = (allowStale = false): SatelliteTle[] | null => {
+  const value = localStorage.getItem(SATELLITE_CACHE_KEY);
+  const timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+  if (!value || (!allowStale && !isCacheFresh(timestamp))) return null;
+
+  try {
+    const parsed = JSON.parse(value) as SatelliteCache;
+    return Array.isArray(parsed.satellites) && parsed.satellites.length > 0
+      ? parsed.satellites
+      : null;
+  } catch {
+    localStorage.removeItem(SATELLITE_CACHE_KEY);
+    localStorage.removeItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+    return null;
+  }
+};
+
+const writeCache = (satellites: SatelliteTle[]) => {
+  try {
+    localStorage.setItem(SATELLITE_CACHE_KEY, JSON.stringify({ satellites }));
+    localStorage.setItem(
+      SATELLITE_CACHE_TIMESTAMP_KEY,
+      new Date().toISOString(),
+    );
+  } catch (error) {
+    // A full active catalog can exceed restrictive browser storage quotas.
+    console.warn("Satellite catalog could not be cached:", error);
+  }
+};
+
+const buildTrackedSatellite = (tle: SatelliteTle): TrackedSatellite | null => {
+  const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
+  if (satrec.error) return null;
+  return {
+    ...tle,
+    satrec,
+    periodSeconds: ((2 * Math.PI) / satrec.no) * 60,
+  };
+};
 
 const World: React.FC = () => {
   const globeEl = useRef<GlobeMethods | undefined>();
   const [time, setTime] = useState(new Date());
-  const [globeRadius, setGlobeRadius] = useState<number>(EARTH_RADIUS_KM);
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
-  const [satClicked, setSatClicked] = useState<boolean>(false);
-  const [orbitPoints, setOrbitPoints] = useState<
-    { lat: number; lng: number; alt: number }[]
+  const [userLocation, setUserLocation] = useState<LocationPoint | null>(null);
+  const [trackedSatellites, setTrackedSatellites] = useState<
+    TrackedSatellite[]
   >([]);
-  const [tleSatrec, setTleSatrec] = useState<satellite.SatRec>();
-  const [issPeriodSeconds, setIssPeriodSeconds] = useState<number | null>(null); // Store the period in seconds
+  const [selectedNoradId, setSelectedNoradId] = useState(DEFAULT_NORAD_ID);
+  const [showOrbit, setShowOrbit] = useState(true);
+  const [followSelected, setFollowSelected] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogPage, setCatalogPage] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState(
+    "Loading the active satellite catalog…",
+  );
 
-  // Helper function to check if cached data is expired
-  const isCacheExpired = (timestamp: string | null): boolean => {
-    if (!timestamp) return true;
-    const fetchTime = new Date(timestamp).getTime();
-    return Date.now() - fetchTime > CACHE_DURATION_MS;
-  };
+  const applyCatalog = useCallback(
+    (catalog: SatelliteTle[], message: string) => {
+      const tracked = catalog
+        .map(buildTrackedSatellite)
+        .filter((item): item is TrackedSatellite => Boolean(item));
+      setTrackedSatellites(tracked);
+      setStatusMessage(
+        message.replace("{count}", tracked.length.toLocaleString()),
+      );
+      setSelectedNoradId((current) =>
+        tracked.some((item) => item.noradId === current)
+          ? current
+          : (tracked[0]?.noradId ?? DEFAULT_NORAD_ID),
+      );
+    },
+    [],
+  );
 
-  // Fetch ISS TLE data with caching
   useEffect(() => {
-    const catnr = 25544; // NORAD ID for ISS
-    const format = "TLE";
-
-    // Check if we have cached data
-    const cachedTLE = localStorage.getItem(TLE_STORAGE_KEY);
-    const cachedTimestamp = localStorage.getItem(TLE_FETCH_TIMESTAMP_KEY);
-
-    if (cachedTLE && !isCacheExpired(cachedTimestamp)) {
-      // Parse cached data and use it
-      const tleData = cachedTLE.split("\n");
-      const tleLine1 = tleData[0].trim();
-      const tleLine2 = tleData[1].trim();
-
-      // Create satellite record
-      const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-      setTleSatrec(satrec);
-
-      // Calculate and store the ISS period in seconds
-      const meanMotion = satrec.no; // revolutions per minute
-      const periodSeconds = ((2 * Math.PI) / meanMotion) * 60; // seconds
-      setIssPeriodSeconds(periodSeconds);
-    } else {
-      // Fetch fresh data and cache it
-      axios
-        .get(
-          `https://celestrak.org/NORAD/elements/gp.php?CATNR=${catnr}&FORMAT=${format}`,
-        )
-        .then((response) => {
-          const tleData = response.data.split("\n");
-          const tleLine1 = tleData[1].trim();
-          const tleLine2 = tleData[2].trim();
-
-          // Cache the TLE data and timestamp
-          localStorage.setItem(TLE_STORAGE_KEY, `${tleLine1}\n${tleLine2}`);
-          localStorage.setItem(
-            TLE_FETCH_TIMESTAMP_KEY,
-            new Date().toISOString(),
-          );
-
-          // Create satellite record
-          const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-          setTleSatrec(satrec);
-
-          // Calculate and store the ISS period in seconds
-          const meanMotion = satrec.no; // revolutions per minute
-          const periodSeconds = ((2 * Math.PI) / meanMotion) * 60; // seconds
-          setIssPeriodSeconds(periodSeconds);
-        })
-        .catch((error) => {
-          console.error("Error fetching TLE data:", error);
-        });
+    const cached = readCache();
+    if (cached) {
+      applyCatalog(cached, "Tracking {count} active satellites from cache.");
+      setIsLoading(false);
+      return;
     }
-  }, []);
 
-  // Get user's geolocation
-  useEffect(() => {
-    getUserLocation()
-      .then((location) => {
-        const userLoc: UserLocation = {
-          lat: location.lat,
-          lng: location.lng,
-          name: "You",
-        };
-        setUserLocation(userLoc);
-        globeEl.current?.pointOfView(
-          { lat: userLoc.lat, lng: userLoc.lng, altitude: 3.5 },
-          1000,
+    // One bulk request replaces thousands of per-satellite requests and is kind
+    // to CelesTrak's rate limits. The result is cached for eight hours.
+    axios
+      .get<string>(CELESTRAK_ACTIVE_URL)
+      .then((response) => {
+        const catalog = parseTleCatalog(response.data);
+        writeCache(catalog);
+        applyCatalog(
+          catalog,
+          "Tracking {count} active satellites from CelesTrak.",
         );
       })
       .catch((error) => {
+        console.error("Error fetching active satellite catalog:", error);
+        const staleCache = readCache(true);
+        if (staleCache) {
+          applyCatalog(
+            staleCache,
+            "CelesTrak is unavailable; tracking {count} satellites from stale cache.",
+          );
+        } else {
+          setStatusMessage(
+            "Unable to load the satellite catalog. Check your connection and refresh.",
+          );
+        }
+      })
+      .finally(() => setIsLoading(false));
+  }, [applyCatalog]);
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setTime(new Date()),
+      POSITION_TICK_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    globeEl.current?.pointOfView({ altitude: 3.2 });
+  }, []);
+
+  const locateUser = useCallback(() => {
+    getUserLocation()
+      .then((location) => {
+        const point = { ...location, name: "You" };
+        setUserLocation(point);
+        globeEl.current?.pointOfView({ ...point, altitude: 2.4 }, 1000);
+      })
+      .catch((error) => {
         console.error("Error getting user location:", error);
+        setStatusMessage(
+          "Location unavailable. Satellite tracking is still active.",
+        );
       });
   }, []);
 
-  // Init globe
-  useEffect(() => {
-    if (globeEl.current) {
-      globeEl.current.pointOfView({ altitude: 3.5 });
-      setGlobeRadius(globeEl.current.getGlobeRadius());
-    }
-  }, []);
-
-  // Time ticker (fps)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date());
-    }, 1000 / FPS);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Propagate ISS position
-  const issPosition = useMemo(() => {
-    if (!tleSatrec) return null;
-
-    // Propagate the satellite's position using the current time
-    const positionAndVelocity = satellite.propagate(tleSatrec, time);
-    const positionEci = positionAndVelocity.position;
-
-    if (!positionEci) return null;
-
-    // Convert ECI coordinates to Geodetic coordinates (latitude, longitude, altitude)
+  const satellitePositions = useMemo<SatellitePosition[]>(() => {
     const gmst = satellite.gstime(time);
-    const positionGd = satellite.eciToGeodetic(
-      positionEci as satellite.EciVec3<number>,
-      gmst,
-    );
-    const lat = satellite.degreesLat(positionGd.latitude);
-    const lng = satellite.degreesLong(positionGd.longitude);
-    const alt = positionGd.height;
+    return trackedSatellites
+      .map((tracked) => {
+        const propagated = satellite.propagate(tracked.satrec, time);
+        if (!propagated.position) return null;
+        const geodetic = satellite.eciToGeodetic(
+          propagated.position as satellite.EciVec3<number>,
+          gmst,
+        );
+        const velocity =
+          propagated.velocity && typeof propagated.velocity === "object"
+            ? (propagated.velocity as satellite.EciVec3<number>)
+            : null;
+        const altitudeKm = geodetic.height;
+        return {
+          noradId: tracked.noradId,
+          name: tracked.name,
+          lat: satellite.degreesLat(geodetic.latitude),
+          lng: satellite.degreesLong(geodetic.longitude),
+          alt: Math.max(altitudeKm / EARTH_RADIUS_KM, 0.005),
+          altitudeKm,
+          velocityKph: velocity
+            ? Math.hypot(velocity.x, velocity.y, velocity.z) * 3600
+            : null,
+          color: getSatelliteColor(tracked.noradId, altitudeKm),
+        };
+      })
+      .filter((item): item is SatellitePosition => Boolean(item));
+  }, [trackedSatellites, time]);
 
-    return { lat, lng, alt: alt / EARTH_RADIUS_KM, name: "ISS" }; // Altitude in Earth radii for the globe visualization
-  }, [tleSatrec, time]);
+  const selectedSatellite = useMemo(
+    () =>
+      trackedSatellites.find((item) => item.noradId === selectedNoradId) ??
+      null,
+    [trackedSatellites, selectedNoradId],
+  );
+  const selectedPosition = useMemo(
+    () =>
+      satellitePositions.find((item) => item.noradId === selectedNoradId) ??
+      null,
+    [satellitePositions, selectedNoradId],
+  );
 
-  // Generate orbit points centered around current ISS position
-  const generateOrbitPoints = useMemo(() => {
-    if (!tleSatrec || !issPeriodSeconds || !issPosition) return [];
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return trackedSatellites
+        .filter((item) => FEATURED_COLORS.has(item.noradId))
+        .slice(0, SEARCH_RESULT_LIMIT);
+    }
+    return trackedSatellites
+      .filter(
+        (item) =>
+          item.name.toLowerCase().includes(query) ||
+          item.noradId.toString().includes(query),
+      )
+      .slice(0, SEARCH_RESULT_LIMIT);
+  }, [trackedSatellites, searchQuery]);
 
-    const points = [];
-    const halfPeriodMs = (issPeriodSeconds * 1000) / 2;
-    const stepMs = (issPeriodSeconds * 1000) / ORBIT_POINTS;
+  const catalogEntries = useMemo(
+    () =>
+      [...trackedSatellites].sort((first, second) =>
+        first.name.localeCompare(second.name),
+      ),
+    [trackedSatellites],
+  );
+  const catalogPageCount = Math.max(
+    1,
+    Math.ceil(catalogEntries.length / CATALOG_PAGE_SIZE),
+  );
+  const visibleCatalogEntries = catalogEntries.slice(
+    catalogPage * CATALOG_PAGE_SIZE,
+    (catalogPage + 1) * CATALOG_PAGE_SIZE,
+  );
 
-    // Iterate from -half period to +half period centered around the current satellite position
-    for (let i = -halfPeriodMs; i <= halfPeriodMs; i += stepMs) {
-      const propagationTime = new Date(time.getTime() + i);
-      const positionAndVelocity = satellite.propagate(
-        tleSatrec,
+  const orbitPoints = useMemo(() => {
+    if (!selectedSatellite || !showOrbit) return [];
+    const points: OrbitPoint[] = [];
+    const halfPeriodMs = (selectedSatellite.periodSeconds * 1000) / 2;
+    const stepMs = (selectedSatellite.periodSeconds * 1000) / ORBIT_POINTS;
+    for (let offset = -halfPeriodMs; offset <= halfPeriodMs; offset += stepMs) {
+      const propagationTime = new Date(time.getTime() + offset);
+      const propagated = satellite.propagate(
+        selectedSatellite.satrec,
         propagationTime,
       );
-      const positionEci = positionAndVelocity.position;
-
-      if (!positionEci) continue;
-
-      const gmst = satellite.gstime(propagationTime);
-      const positionGd = satellite.eciToGeodetic(
-        positionEci as satellite.EciVec3<number>,
-        gmst,
+      if (!propagated.position) continue;
+      const geodetic = satellite.eciToGeodetic(
+        propagated.position as satellite.EciVec3<number>,
+        satellite.gstime(propagationTime),
       );
-      const lat = satellite.degreesLat(positionGd.latitude);
-      const lng = satellite.degreesLong(positionGd.longitude);
-      const alt = positionGd.height;
-
-      points.push({ lat, lng, alt: alt / EARTH_RADIUS_KM });
+      points.push({
+        lat: satellite.degreesLat(geodetic.latitude),
+        lng: satellite.degreesLong(geodetic.longitude),
+        alt: geodetic.height / EARTH_RADIUS_KM,
+      });
     }
-
     return points;
-  }, [tleSatrec, issPeriodSeconds, issPosition, time]);
+  }, [selectedSatellite, showOrbit, time]);
 
-  // Update orbit points when ISS position is updated
   useEffect(() => {
-    setOrbitPoints(generateOrbitPoints);
-  }, [generateOrbitPoints]);
-
-  // Satellite object (ISS)
-  const satObject = useMemo(() => {
-    if (!globeRadius) return undefined;
-
-    // Satellite object
-    const satGeometry = new THREE.OctahedronGeometry(
-      (SAT_SIZE * globeRadius) / EARTH_RADIUS_KM / 2,
-      0,
+    if (!followSelected || !selectedPosition) return;
+    globeEl.current?.pointOfView(
+      { lat: selectedPosition.lat, lng: selectedPosition.lng, altitude: 2.1 },
+      POSITION_TICK_MS,
     );
-    const satMaterial = new THREE.MeshLambertMaterial({
-      color: "red",
-      transparent: true,
-      opacity: 0.7,
-    });
-    const satellite = new THREE.Mesh(satGeometry, satMaterial);
-    satellite.name = "ISS"; // Name the satellite for identification
+  }, [followSelected, selectedPosition]);
 
-    // Click area object
-    const clickAreaGeometry = new THREE.SphereGeometry(
-      (CLICK_AREA_SIZE * globeRadius) / EARTH_RADIUS_KM / 2,
-      32,
-      32,
-    );
-    const clickAreaMaterial = new THREE.MeshBasicMaterial({
-      color: "black",
-      transparent: true,
-      opacity: 0,
-      depthTest: false,
-    });
-    const clickArea = new THREE.Mesh(clickAreaGeometry, clickAreaMaterial);
-    clickArea.renderOrder = 999; // Ensure click area is rendered last
-
-    const group = new THREE.Group();
-    group.add(satellite);
-    group.add(clickArea);
-
-    return group;
-  }, [globeRadius]);
-
-  // Handle object click
-  const handleObjectClick = (obj: object) => {
-    const object = obj as THREE.Object3D;
-    if (object.name === "ISS") {
-      setSatClicked((prev) => !prev);
-    }
+  const selectSatellite = (noradId: number) => {
+    setSelectedNoradId(noradId);
+    setShowOrbit(true);
   };
 
   return (
-    <div>
+    <div className="h-full w-full">
       <Globe
         ref={globeEl}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         backgroundColor="black"
-        showAtmosphere={true}
-        // User location
+        showAtmosphere
         labelsData={userLocation ? [userLocation] : []}
-        labelLat={(d: object) => (d as UserLocation).lat}
-        labelLng={(d: object) => (d as UserLocation).lng}
-        labelText={(d: object) => (d as UserLocation).name}
+        labelLat="lat"
+        labelLng="lng"
+        labelText="name"
+        labelColor={() => "rgba(255, 165, 0, 0.9)"}
         labelSize={1}
         labelDotRadius={0.5}
-        labelsTransitionDuration={50}
-        labelColor={() => "rgba(255, 165, 0, 0.75)"}
-        labelResolution={2}
-        // ISS position
-        objectsData={issPosition ? [issPosition] : []}
-        objectLabel="name"
-        objectLat="lat"
-        objectLng="lng"
-        objectAltitude="alt"
-        objectFacesSurfaces={false}
-        objectThreeObject={satObject}
-        // Handle click
-        onObjectClick={handleObjectClick}
-        // Orbit trajectory
-        pathsData={satClicked ? [{ points: orbitPoints }] : []}
+        pointsData={satellitePositions}
+        pointLat="lat"
+        pointLng="lng"
+        pointAltitude={() => MARKER_ALTITUDE}
+        pointColor="color"
+        pointRadius={(item: object) =>
+          (item as SatellitePosition).noradId === selectedNoradId ? 0.12 : 0.045
+        }
+        pointsMerge
+        pointsTransitionDuration={0}
+        pathsData={
+          orbitPoints.length > 0
+            ? [{ points: orbitPoints, color: selectedPosition?.color }]
+            : []
+        }
         pathPoints="points"
         pathPointLat="lat"
         pathPointLng="lng"
         pathPointAlt="alt"
-        pathColor={() => "rgba(255, 0, 0, 0.7)"}
+        pathColor={(path: object) =>
+          `${(path as { color?: string }).color ?? "#67e8f9"}cc`
+        }
         pathStroke={0.5}
         pathTransitionDuration={0}
       />
+
+      <aside className="absolute left-4 top-24 z-20 max-h-[calc(100vh-7rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/80 p-4 text-left text-white shadow-2xl backdrop-blur-md">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+          Active catalog
+        </p>
+        <h2 className="mt-1 text-2xl font-bold">Satellite Tracker</h2>
+        <p className="mt-2 text-sm text-slate-300">{statusMessage}</p>
+
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Find by name or NORAD ID
+          <input
+            className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm font-normal normal-case tracking-normal text-white outline-none placeholder:text-slate-500 focus:border-cyan-300"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="e.g. Starlink, Hubble, 25544"
+            type="search"
+            value={searchQuery}
+          />
+        </label>
+
+        {searchResults.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {searchResults.map((item) => (
+              <button
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                  item.noradId === selectedNoradId
+                    ? "bg-cyan-300/20 text-cyan-100"
+                    : "bg-white/5 hover:bg-white/10"
+                }`}
+                key={item.noradId}
+                onClick={() => selectSatellite(item.noradId)}
+                type="button"
+              >
+                <span className="truncate font-medium">{item.name}</span>
+                <span className="ml-2 shrink-0 text-xs text-slate-400">
+                  {item.noradId}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <h3 className="mt-4 truncate text-lg font-bold">
+          {selectedPosition?.name ?? "Select a satellite"}
+        </h3>
+        {selectedPosition && (
+          <p className="text-xs text-slate-400">
+            NORAD {selectedPosition.noradId}
+          </p>
+        )}
+
+        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <Telemetry label="Latitude">
+            {selectedPosition
+              ? formatCoordinate(selectedPosition.lat, "N", "S")
+              : "—"}
+          </Telemetry>
+          <Telemetry label="Longitude">
+            {selectedPosition
+              ? formatCoordinate(selectedPosition.lng, "E", "W")
+              : "—"}
+          </Telemetry>
+          <Telemetry label="Altitude">
+            {selectedPosition
+              ? `${selectedPosition.altitudeKm.toFixed(0)} km`
+              : "—"}
+          </Telemetry>
+          <Telemetry label="Speed">
+            {selectedPosition?.velocityKph
+              ? `${selectedPosition.velocityKph.toLocaleString(undefined, { maximumFractionDigits: 0 })} km/h`
+              : "—"}
+          </Telemetry>
+        </dl>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <ControlButton
+            onClick={() => {
+              setCatalogPage(0);
+              setShowCatalog(true);
+            }}
+          >
+            Browse all
+          </ControlButton>
+          <ControlButton onClick={() => setFollowSelected((value) => !value)}>
+            {followSelected ? "Stop following" : "Follow selected"}
+          </ControlButton>
+          <ControlButton onClick={() => setShowOrbit((value) => !value)}>
+            {showOrbit ? "Hide orbit" : "Show orbit"}
+          </ControlButton>
+          <ControlButton onClick={locateUser}>Locate me</ControlButton>
+        </div>
+        {isLoading && (
+          <p className="mt-3 text-xs text-slate-400">
+            Fetching one bulk catalog from CelesTrak…
+          </p>
+        )}
+      </aside>
+
+      {showCatalog && (
+        <div
+          aria-modal="true"
+          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+          role="dialog"
+        >
+          <section className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 p-4 sm:p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+                  Active catalog
+                </p>
+                <h2 className="mt-1 text-2xl font-bold">
+                  All {catalogEntries.length.toLocaleString()} satellites
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Select any satellite to view its telemetry and orbit.
+                </p>
+              </div>
+              <button
+                aria-label="Close satellite catalog"
+                className="rounded-full bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+                onClick={() => setShowCatalog(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </header>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4">
+              {visibleCatalogEntries.map((item) => (
+                <button
+                  className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
+                    item.noradId === selectedNoradId
+                      ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
+                      : "border-white/10 bg-white/5 hover:bg-white/10"
+                  }`}
+                  key={item.noradId}
+                  onClick={() => {
+                    selectSatellite(item.noradId);
+                    setShowCatalog(false);
+                  }}
+                  type="button"
+                >
+                  <span className="truncate font-medium">{item.name}</span>
+                  <span className="ml-3 shrink-0 text-xs text-slate-400">
+                    {item.noradId}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <footer className="flex items-center justify-between gap-3 border-t border-white/10 p-4">
+              <button
+                className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={catalogPage === 0}
+                onClick={() => setCatalogPage((page) => Math.max(0, page - 1))}
+                type="button"
+              >
+                Previous
+              </button>
+              <p className="text-sm text-slate-400">
+                Page {catalogPage + 1} of {catalogPageCount}
+              </p>
+              <button
+                className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={catalogPage >= catalogPageCount - 1}
+                onClick={() =>
+                  setCatalogPage((page) =>
+                    Math.min(catalogPageCount - 1, page + 1),
+                  )
+                }
+                type="button"
+              >
+                Next
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 };
+
+const Telemetry = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
+  <div className="rounded-xl bg-white/10 p-3">
+    <dt className="text-slate-400">{label}</dt>
+    <dd className="font-semibold">{children}</dd>
+  </div>
+);
+
+const ControlButton = ({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) => (
+  <button
+    className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20"
+    onClick={onClick}
+    type="button"
+  >
+    {children}
+  </button>
+);
 
 export default World;

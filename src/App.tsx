@@ -1,5 +1,4 @@
 import React from "react";
-import CurrentDateTimeDisplay from "./components/CurrentDateTimeDisplay";
 import World from "./components/World";
 
 const App: React.FC = () => {
@@ -14,7 +13,6 @@ const App: React.FC = () => {
         </h1>
       </header>
       <World />
-      <CurrentDateTimeDisplay />
     </main>
   );
 };

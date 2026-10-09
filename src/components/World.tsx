@@ -6,14 +6,20 @@ import { useUserLocation } from "../hooks/useUserLocation";
 import { useFavorites } from "../hooks/useFavorites";
 import { useTimeLapse } from "../hooks/useTimeLapse";
 import { useMultipleTracking } from "../hooks/useMultipleTracking";
-import { SatellitePosition, formatCoordinate, ALTITUDE_FILTERS, AltitudeFilter, getAltitudeClass } from "../utils/satellite";
+import {
+  SatellitePosition,
+  formatCoordinate,
+  ALTITUDE_FILTERS,
+  AltitudeFilter,
+  getAltitudeClass,
+} from "../utils/satellite";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
 
 const World: React.FC = () => {
   const globeEl = useRef<GlobeMethods | undefined>();
-  
+
   // Custom hooks
   const {
     trackedSatellites,
@@ -36,18 +42,10 @@ const World: React.FC = () => {
     MARKER_ALTITUDE,
   } = useSatellitePositions(trackedSatellites, selectedNoradId);
 
-  const {
-    userLocation,
-    locateUser,
-    clearUserLocation,
-  } = useUserLocation();
+  const { userLocation, locateUser, clearUserLocation } = useUserLocation();
 
-  const {
-    favorites,
-    isFavorite,
-    toggleFavorite,
-    clearFavorites,
-  } = useFavorites();
+  const { favorites, isFavorite, toggleFavorite, clearFavorites } =
+    useFavorites();
 
   const {
     isTimeLapseActive,
@@ -74,7 +72,7 @@ const World: React.FC = () => {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showTimeLapseControls, setShowTimeLapseControls] = useState(false);
   const [catalogPage, setCatalogPage] = useState(0);
-  const [altitudeFilter, setAltitudeFilter] = useState<AltitudeFilter>('all');
+  const [altitudeFilter, setAltitudeFilter] = useState<AltitudeFilter>("all");
 
   // Initialize globe view
   useEffect(() => {
@@ -92,28 +90,33 @@ const World: React.FC = () => {
 
   // Filter satellites by altitude
   const filteredSatellites = useMemo(() => {
-    if (altitudeFilter === 'all') return trackedSatellites;
-    return trackedSatellites.filter((sat: { noradId: number; name: string; periodSeconds: number }) => {
-      const altitudeEstimate = Math.pow(
-        ((sat.periodSeconds * 60) / (2 * Math.PI)) ** 2 * 3.986e14,
-        1/3
-      ) - 6371000;
-      const altitudeKm = altitudeEstimate / 1000;
-      const altitudeClass = getAltitudeClass(altitudeKm);
-      return altitudeClass === altitudeFilter;
-    });
+    if (altitudeFilter === "all") return trackedSatellites;
+    return trackedSatellites.filter(
+      (sat: { noradId: number; name: string; periodSeconds: number }) => {
+        const altitudeEstimate =
+          Math.pow(
+            ((sat.periodSeconds * 60) / (2 * Math.PI)) ** 2 * 3.986e14,
+            1 / 3,
+          ) - 6371000;
+        const altitudeKm = altitudeEstimate / 1000;
+        const altitudeClass = getAltitudeClass(altitudeKm);
+        return altitudeClass === altitudeFilter;
+      },
+    );
   }, [trackedSatellites, altitudeFilter]);
 
   // Search results
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const satellitesToSearch = filteredSatellites;
-    
+
     if (!query) {
       // Show featured satellites when no query
       const featuredIds = [25544, 20580, 25994, 33591];
       return satellitesToSearch
-        .filter((item: { noradId: number; name: string }) => featuredIds.includes(item.noradId))
+        .filter((item: { noradId: number; name: string }) =>
+          featuredIds.includes(item.noradId),
+        )
         .slice(0, SEARCH_RESULT_LIMIT);
     }
     return satellitesToSearch
@@ -127,18 +130,21 @@ const World: React.FC = () => {
 
   // Favorites list
   const favoriteSatellites = useMemo(() => {
-    return trackedSatellites.filter((sat: { noradId: number }) => favorites.includes(sat.noradId));
+    return trackedSatellites.filter((sat: { noradId: number }) =>
+      favorites.includes(sat.noradId),
+    );
   }, [trackedSatellites, favorites]);
 
   // Catalog entries
   const catalogEntries = useMemo(
     () =>
-      [...filteredSatellites].sort((first: { name: string }, second: { name: string }) =>
-        first.name.localeCompare(second.name),
+      [...filteredSatellites].sort(
+        (first: { name: string }, second: { name: string }) =>
+          first.name.localeCompare(second.name),
       ),
     [filteredSatellites],
   );
-  
+
   const catalogPageCount = Math.max(
     1,
     Math.ceil(catalogEntries.length / CATALOG_PAGE_SIZE),
@@ -381,17 +387,23 @@ const World: React.FC = () => {
               {showOrbit ? "Hide orbit" : "Show orbit"}
             </ControlButton>
             <ControlButton onClick={locateUser}>Locate me</ControlButton>
-            <ControlButton onClick={refreshCatalog}>
-              Refresh
-            </ControlButton>
+            <ControlButton onClick={refreshCatalog}>Refresh</ControlButton>
             {selectedPosition && (
-              <ControlButton onClick={() => toggleFavorite(selectedPosition.noradId)}>
-                {isFavorite(selectedPosition.noradId) ? "★ Favorited" : "☆ Favorite"}
+              <ControlButton
+                onClick={() => toggleFavorite(selectedPosition.noradId)}
+              >
+                {isFavorite(selectedPosition.noradId)
+                  ? "★ Favorited"
+                  : "☆ Favorite"}
               </ControlButton>
             )}
             {selectedPosition && (
-              <ControlButton onClick={() => toggleTracked(selectedPosition.noradId)}>
-                {isTracked(selectedPosition.noradId) ? "📍 Tracked" : "📍 Track"}
+              <ControlButton
+                onClick={() => toggleTracked(selectedPosition.noradId)}
+              >
+                {isTracked(selectedPosition.noradId)
+                  ? "📍 Tracked"
+                  : "📍 Track"}
               </ControlButton>
             )}
             {userLocation && (
@@ -459,34 +471,39 @@ const World: React.FC = () => {
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4">
               {favoriteSatellites.length > 0 ? (
-                favoriteSatellites.map((item: { noradId: number; name: string }) => (
-                  <button
-                    className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
-                      item.noradId === selectedNoradId
-                        ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
-                        : "border-white/10 bg-white/5 hover:bg-white/10"
-                    }`}
-                    key={item.noradId}
-                    onClick={() => {
-                      handleSelectSatellite(item.noradId);
-                      setShowFavorites(false);
-                    }}
-                    type="button"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-medium">{item.name}</span>
-                      {isTracked(item.noradId) && (
-                        <span className="text-blue-400">📍</span>
-                      )}
-                    </div>
-                    <span className="ml-3 shrink-0 text-xs text-slate-400">
-                      {item.noradId}
-                    </span>
-                  </button>
-                ))
+                favoriteSatellites.map(
+                  (item: { noradId: number; name: string }) => (
+                    <button
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
+                        item.noradId === selectedNoradId
+                          ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
+                          : "border-white/10 bg-white/5 hover:bg-white/10"
+                      }`}
+                      key={item.noradId}
+                      onClick={() => {
+                        handleSelectSatellite(item.noradId);
+                        setShowFavorites(false);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {item.name}
+                        </span>
+                        {isTracked(item.noradId) && (
+                          <span className="text-blue-400">📍</span>
+                        )}
+                      </div>
+                      <span className="ml-3 shrink-0 text-xs text-slate-400">
+                        {item.noradId}
+                      </span>
+                    </button>
+                  ),
+                )
               ) : (
                 <p className="p-4 text-center text-slate-400">
-                  No favorites yet. Add satellites to favorites from the control panel.
+                  No favorites yet. Add satellites to favorites from the control
+                  panel.
                 </p>
               )}
             </div>
@@ -543,15 +560,21 @@ const World: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-300">Status</span>
-                  <span className={`rounded-full px-3 py-1 text-sm ${
-                    isTimeLapseActive ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                  }`}>
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm ${
+                      isTimeLapseActive
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-red-500/20 text-red-400"
+                    }`}
+                  >
                     {isTimeLapseActive ? "Active" : "Stopped"}
                   </span>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-300 mb-2">Speed</label>
+                  <label className="block text-sm text-slate-300 mb-2">
+                    Speed
+                  </label>
                   <div className="grid grid-cols-4 gap-2">
                     {speeds.map((s) => (
                       <button
@@ -622,34 +645,36 @@ const World: React.FC = () => {
             </header>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4">
-              {visibleCatalogEntries.map((item: { noradId: number; name: string }) => (
-                <button
-                  className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
-                    item.noradId === selectedNoradId
-                      ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
-                  }`}
-                  key={item.noradId}
-                  onClick={() => {
-                    handleSelectSatellite(item.noradId);
-                    setShowCatalog(false);
-                  }}
-                  type="button"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{item.name}</span>
-                    {isFavorite(item.noradId) && (
-                      <span className="text-yellow-400">★</span>
-                    )}
-                    {isTracked(item.noradId) && (
-                      <span className="text-blue-400">📍</span>
-                    )}
-                  </div>
-                  <span className="ml-3 shrink-0 text-xs text-slate-400">
-                    {item.noradId}
-                  </span>
-                </button>
-              ))}
+              {visibleCatalogEntries.map(
+                (item: { noradId: number; name: string }) => (
+                  <button
+                    className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
+                      item.noradId === selectedNoradId
+                        ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
+                        : "border-white/10 bg-white/5 hover:bg-white/10"
+                    }`}
+                    key={item.noradId}
+                    onClick={() => {
+                      handleSelectSatellite(item.noradId);
+                      setShowCatalog(false);
+                    }}
+                    type="button"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{item.name}</span>
+                      {isFavorite(item.noradId) && (
+                        <span className="text-yellow-400">★</span>
+                      )}
+                      {isTracked(item.noradId) && (
+                        <span className="text-blue-400">📍</span>
+                      )}
+                    </div>
+                    <span className="ml-3 shrink-0 text-xs text-slate-400">
+                      {item.noradId}
+                    </span>
+                  </button>
+                ),
+              )}
             </div>
 
             <footer className="flex items-center justify-between gap-3 border-t border-white/10 p-4">

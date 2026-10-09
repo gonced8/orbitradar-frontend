@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 
 const TIME_LAPSE_SPEEDS = [1, 5, 10, 30, 60, 120, 300, 600] as const; // 1x, 5x, 10x, 30x, 1min, 2min, 5min, 10min
 
-export type TimeLapseSpeed = typeof TIME_LAPSE_SPEEDS[number];
+export type TimeLapseSpeed = (typeof TIME_LAPSE_SPEEDS)[number];
 
 export const useTimeLapse = () => {
   const [isTimeLapseActive, setIsTimeLapseActive] = useState(false);
@@ -16,19 +16,19 @@ export const useTimeLapse = () => {
   // Start time lapse
   const startTimeLapse = useCallback(() => {
     if (intervalRef.current) return;
-    
+
     setIsTimeLapseActive(true);
-    
+
     const updateTime = () => {
       setCurrentTime((prev) => {
         const newTime = new Date(prev.getTime() + speed * 1000);
         return newTime;
       });
     };
-    
+
     // Initial update
     updateTime();
-    
+
     // Set interval
     intervalRef.current = setInterval(updateTime, 1000);
   }, [speed]);
@@ -52,14 +52,17 @@ export const useTimeLapse = () => {
   }, [isTimeLapseActive, startTimeLapse, stopTimeLapse]);
 
   // Change speed
-  const setTimeLapseSpeed = useCallback((newSpeed: TimeLapseSpeed) => {
-    setSpeed(newSpeed);
-    // Restart with new speed
-    if (isTimeLapseActive) {
-      stopTimeLapse();
-      startTimeLapse();
-    }
-  }, [isTimeLapseActive, startTimeLapse, stopTimeLapse]);
+  const setTimeLapseSpeed = useCallback(
+    (newSpeed: TimeLapseSpeed) => {
+      setSpeed(newSpeed);
+      // Restart with new speed
+      if (isTimeLapseActive) {
+        stopTimeLapse();
+        startTimeLapse();
+      }
+    },
+    [isTimeLapseActive, startTimeLapse, stopTimeLapse],
+  );
 
   // Reset to current time
   const resetTime = useCallback(() => {

@@ -3,7 +3,9 @@ import { SatellitePosition } from "../utils/satellite";
 
 const MAX_TRACKED = 10; // Maximum number of satellites to track simultaneously
 
-export const useMultipleTracking = (satellitePositions: SatellitePosition[]) => {
+export const useMultipleTracking = (
+  satellitePositions: SatellitePosition[],
+) => {
   const [trackedNoradIds, setTrackedNoradIds] = useState<number[]>([]);
 
   // Track a satellite
@@ -46,12 +48,14 @@ export const useMultipleTracking = (satellitePositions: SatellitePosition[]) => 
     (noradId: number): boolean => {
       return trackedNoradIds.includes(noradId);
     },
-    [trackedNoradIds]
+    [trackedNoradIds],
   );
 
   // Get positions of tracked satellites
   const trackedPositions = useMemo(() => {
-    return satellitePositions.filter((pos) => trackedNoradIds.includes(pos.noradId));
+    return satellitePositions.filter((pos) =>
+      trackedNoradIds.includes(pos.noradId),
+    );
   }, [satellitePositions, trackedNoradIds]);
 
   // Get tracked satellite IDs with their positions
@@ -61,7 +65,10 @@ export const useMultipleTracking = (satellitePositions: SatellitePosition[]) => 
         const pos = satellitePositions.find((p) => p.noradId === id);
         return pos ? { noradId: id, position: pos } : null;
       })
-      .filter((item): item is { noradId: number; position: SatellitePosition } => item !== null);
+      .filter(
+        (item): item is { noradId: number; position: SatellitePosition } =>
+          item !== null,
+      );
   }, [satellitePositions, trackedNoradIds]);
 
   // Get colors for tracked satellites (highlight them)
@@ -70,10 +77,21 @@ export const useMultipleTracking = (satellitePositions: SatellitePosition[]) => 
       const index = trackedNoradIds.indexOf(noradId);
       if (index === -1) return "";
       // Use different colors for each tracked satellite
-      const colors = ["#ff4d4f", "#7dd3fc", "#34d399", "#fbbf24", "#a78bfa", "#f9a8d4", "#67e8f9", "#10b981", "#f59e0b", "#8b5cf6"];
+      const colors = [
+        "#ff4d4f",
+        "#7dd3fc",
+        "#34d399",
+        "#fbbf24",
+        "#a78bfa",
+        "#f9a8d4",
+        "#67e8f9",
+        "#10b981",
+        "#f59e0b",
+        "#8b5cf6",
+      ];
       return colors[index % colors.length];
     },
-    [trackedNoradIds]
+    [trackedNoradIds],
   );
 
   return {

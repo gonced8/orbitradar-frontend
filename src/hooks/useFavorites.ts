@@ -26,40 +26,31 @@ export const useFavorites = () => {
     (noradId: number): boolean => {
       return favorites.includes(noradId);
     },
-    [favorites]
+    [favorites],
   );
 
   // Toggle favorite status
-  const toggleFavorite = useCallback(
-    (noradId: number): void => {
-      setFavorites((prev) => {
-        if (prev.includes(noradId)) {
-          return prev.filter((id) => id !== noradId);
-        }
-        return [...prev, noradId];
-      });
-    },
-    []
-  );
+  const toggleFavorite = useCallback((noradId: number): void => {
+    setFavorites((prev) => {
+      if (prev.includes(noradId)) {
+        return prev.filter((id) => id !== noradId);
+      }
+      return [...prev, noradId];
+    });
+  }, []);
 
   // Add to favorites
-  const addFavorite = useCallback(
-    (noradId: number): void => {
-      setFavorites((prev) => {
-        if (prev.includes(noradId)) return prev;
-        return [...prev, noradId];
-      });
-    },
-    []
-  );
+  const addFavorite = useCallback((noradId: number): void => {
+    setFavorites((prev) => {
+      if (prev.includes(noradId)) return prev;
+      return [...prev, noradId];
+    });
+  }, []);
 
   // Remove from favorites
-  const removeFavorite = useCallback(
-    (noradId: number): void => {
-      setFavorites((prev) => prev.filter((id) => id !== noradId));
-    },
-    []
-  );
+  const removeFavorite = useCallback((noradId: number): void => {
+    setFavorites((prev) => prev.filter((id) => id !== noradId));
+  }, []);
 
   // Clear all favorites
   const clearFavorites = useCallback((): void => {

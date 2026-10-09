@@ -13,10 +13,59 @@
     sans-serif;
   color: rgba(255, 255, 255, 0.92);
   background: #020617;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  color: #0f172a;
+  background: #e2e8f0;
+}
+
+:root[data-theme="light"] .bg-black {
+  background-color: #e2e8f0;
+}
+:root[data-theme="light"] .bg-slate-950\/95,
+:root[data-theme="light"] .bg-slate-950\/90,
+:root[data-theme="light"] .bg-slate-950 {
+  color: #0f172a;
+  background-color: rgb(248 250 252 / 96%);
+}
+:root[data-theme="light"] .text-white {
+  color: #0f172a;
+}
+:root[data-theme="light"] .text-slate-300 {
+  color: #334155;
+}
+:root[data-theme="light"] .text-slate-400 {
+  color: #475569;
+}
+:root[data-theme="light"] .text-slate-500 {
+  color: #64748b;
+}
+:root[data-theme="light"] .text-cyan-100,
+:root[data-theme="light"] .text-cyan-200,
+:root[data-theme="light"] .text-cyan-300 {
+  color: #0e7490;
+}
+:root[data-theme="light"] .text-amber-300 {
+  color: #b45309;
+}
+:root[data-theme="light"] .text-blue-400 {
+  color: #1d4ed8;
+}
+:root[data-theme="light"] .text-green-400 {
+  color: #15803d;
+}
+:root[data-theme="light"] .text-red-400 {
+  color: #b91c1c;
+}
+:root[data-theme="light"] .text-yellow-400 {
+  color: #a16207;
 }
 
 * {

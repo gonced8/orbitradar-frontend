@@ -9,9 +9,12 @@ export type SatelliteTle = {
   line2: string;
 };
 
-export type TrackedSatellite = SatelliteTle & {
-  satrec: satellite.SatRec;
+export type SatelliteCatalogEntry = SatelliteTle & {
   periodSeconds: number;
+};
+
+export type TrackedSatellite = SatelliteCatalogEntry & {
+  satrec: satellite.SatRec;
 };
 
 export type OrbitPoint = { lat: number; lng: number; alt: number };
@@ -22,6 +25,7 @@ export type SatellitePosition = OrbitPoint & {
   altitudeKm: number;
   velocityKph: number | null;
   color: string;
+  altitudeClass: AltitudeClass;
 };
 
 export type LocationPoint = { lat: number; lng: number; name: string };
@@ -96,7 +100,21 @@ export const buildTrackedSatellite = (
   };
 };
 
-// Estimate altitude from orbital period (simplified)
+export const buildCatalogEntry = (
+  tle: SatelliteTle,
+): SatelliteCatalogEntry | null => {
+  const meanMotionRevolutionsPerDay = Number.parseFloat(
+    tle.line2.slice(52, 63),
+  );
+  if (
+    !Number.isFinite(meanMotionRevolutionsPerDay) ||
+    meanMotionRevolutionsPerDay <= 0
+  )
+    return null;
+  return { ...tle, periodSeconds: 86400 / meanMotionRevolutionsPerDay };
+};
+
+// satellite.js mean motion is radians per minute; return altitude in km.
 export const estimateAltitudeFromPeriod = (periodSeconds: number): number => {
   const GM = 3.986e14; // Earth's gravitational parameter in m^3/s^2
   const T = periodSeconds;
@@ -113,6 +131,9 @@ export const getAltitudeClass = (altitudeKm: number): AltitudeClass => {
   if (altitudeKm < 20000) return "meo";
   return "geo";
 };
+
+export const altitudeToGlobeRadius = (altitudeKm: number): number =>
+  Math.max(altitudeKm / EARTH_RADIUS_KM, 0.0005);
 
 // Altitude filters
 export const ALTITUDE_FILTERS = {

@@ -1,5 +1,6 @@
 import React from "react";
 import { Settings } from "../hooks/useSettings";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 type SettingsPanelProps = {
   settings: Settings;
@@ -14,19 +15,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onReset,
   onClose,
 }) => {
+  const dialogRef = useDialogFocus<HTMLElement>(true, onClose);
   return (
-    <div
-      aria-modal="true"
-      className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      role="dialog"
-    >
-      <section className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <section
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
+      >
         <header className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
               Settings
             </p>
-            <h2 className="mt-1 text-2xl font-bold">Configuration</h2>
+            <h2 id="settings-title" className="mt-1 text-2xl font-bold">
+              Configuration
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
               Customize your OrbitRadar experience
             </p>
@@ -57,6 +64,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         ? "border-cyan-400 bg-cyan-400/20 text-cyan-300"
                         : "border-white/10 bg-white/5 hover:bg-white/10"
                     }`}
+                    aria-pressed={settings.theme === theme}
                     onClick={() => onUpdate("theme", theme)}
                     type="button"
                   >
@@ -78,6 +86,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       ? "bg-cyan-500/20 text-cyan-300"
                       : "bg-white/10 text-slate-400"
                   }`}
+                  aria-pressed={settings.showOrbitsByDefault}
                   onClick={() =>
                     onUpdate(
                       "showOrbitsByDefault",
@@ -125,6 +134,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       ? "bg-cyan-500/20 text-cyan-300"
                       : "bg-white/10 text-slate-400"
                   }`}
+                  aria-pressed={settings.autoRefresh}
                   onClick={() => onUpdate("autoRefresh", !settings.autoRefresh)}
                   type="button"
                 >

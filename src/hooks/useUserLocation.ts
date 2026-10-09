@@ -6,16 +6,23 @@ const USER_LOCATION_KEY = "orbitradar_user_location";
 
 export const useUserLocation = () => {
   const [userLocation, setUserLocation] = useState<LocationPoint | null>(() => {
-    // Try to load last saved location
-    const saved = localStorage.getItem(USER_LOCATION_KEY);
-    if (saved) {
-      try {
-        return { ...JSON.parse(saved), name: "You" };
-      } catch {
-        return null;
-      }
+    try {
+      const saved = localStorage.getItem(USER_LOCATION_KEY);
+      if (!saved) return null;
+      const parsed: unknown = JSON.parse(saved);
+      if (!parsed || typeof parsed !== "object") return null;
+      const { lat, lng } = parsed as { lat?: unknown; lng?: unknown };
+      return typeof lat === "number" &&
+        Number.isFinite(lat) &&
+        Math.abs(lat) <= 90 &&
+        typeof lng === "number" &&
+        Number.isFinite(lng) &&
+        Math.abs(lng) <= 180
+        ? { lat, lng, name: "You" }
+        : null;
+    } catch {
+      return null;
     }
-    return null;
   });
 
   const locateUser = useCallback(() => {
@@ -24,7 +31,11 @@ export const useUserLocation = () => {
         const point = { ...location, name: "You" };
         setUserLocation(point);
         // Save to localStorage for persistence
-        localStorage.setItem(USER_LOCATION_KEY, JSON.stringify(location));
+        try {
+          localStorage.setItem(USER_LOCATION_KEY, JSON.stringify(location));
+        } catch {
+          /* Location remains available for this session. */
+        }
         return point;
       })
       .catch((error) => {
@@ -35,7 +46,11 @@ export const useUserLocation = () => {
 
   const clearUserLocation = useCallback(() => {
     setUserLocation(null);
-    localStorage.removeItem(USER_LOCATION_KEY);
+    try {
+      localStorage.removeItem(USER_LOCATION_KEY);
+    } catch {
+      /* Storage may be disabled. */
+    }
   }, []);
 
   return {

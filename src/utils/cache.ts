@@ -14,22 +14,33 @@ type SatelliteCache = { satellites: SatelliteTle[] };
 export const isCacheFresh = (timestamp: string | null): boolean => {
   if (!timestamp) return false;
   const cachedAt = Date.parse(timestamp);
-  return !Number.isNaN(cachedAt) && Date.now() - cachedAt < CACHE_DURATION_MS;
+  const age = Date.now() - cachedAt;
+  return !Number.isNaN(cachedAt) && age >= 0 && age < CACHE_DURATION_MS;
 };
 
 export const readCache = (allowStale = false): SatelliteTle[] | null => {
-  const value = localStorage.getItem(SATELLITE_CACHE_KEY);
-  const timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
-  if (!value || (!allowStale && !isCacheFresh(timestamp))) return null;
-
   try {
+    const value = localStorage.getItem(SATELLITE_CACHE_KEY);
+    const timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+    if (!value || (!allowStale && !isCacheFresh(timestamp))) return null;
     const parsed = JSON.parse(value) as SatelliteCache;
-    return Array.isArray(parsed.satellites) && parsed.satellites.length > 0
-      ? parsed.satellites
-      : null;
+    if (!Array.isArray(parsed.satellites)) return null;
+    const valid = parsed.satellites.filter(
+      (sat) =>
+        sat &&
+        Number.isSafeInteger(sat.noradId) &&
+        typeof sat.name === "string" &&
+        typeof sat.line1 === "string" &&
+        typeof sat.line2 === "string",
+    );
+    return valid.length ? valid : null;
   } catch {
-    localStorage.removeItem(SATELLITE_CACHE_KEY);
-    localStorage.removeItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+    try {
+      localStorage.removeItem(SATELLITE_CACHE_KEY);
+      localStorage.removeItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+    } catch {
+      // Storage can be disabled or full.
+    }
     return null;
   }
 };

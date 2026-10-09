@@ -43,13 +43,21 @@ const World: React.FC = () => {
     getTimeOffsetDisplay,
   } = useTimeLapse();
 
-  const { satellitePositions, selectedPosition, orbitPoints, showOrbit, setShowOrbit, followSelected, setFollowSelected, MARKER_ALTITUDE } = useSatellitePositions(trackedSatellites, selectedNoradId, currentTime);
+  const {
+    satellitePositions,
+    selectedPosition,
+    orbitPoints,
+    showOrbit,
+    setShowOrbit,
+    followSelected,
+    setFollowSelected,
+    MARKER_ALTITUDE,
+  } = useSatellitePositions(trackedSatellites, selectedNoradId, currentTime);
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
 
   const { favorites, isFavorite, toggleFavorite, clearFavorites } =
     useFavorites();
-
 
   const {
     trackedNoradIds,

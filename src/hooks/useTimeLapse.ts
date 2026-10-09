@@ -25,14 +25,14 @@ export const useTimeLapse = () => {
   // Format time offset for display
   const getTimeOffsetDisplay = useCallback((): string => {
     if (!isTimeLapseActive && timeOffsetMs === 0) return "Live";
-    
+
     const totalMs = isTimeLapseActive
       ? timeOffsetMs + (Date.now() - startTimestamp) * speed
       : timeOffsetMs;
-    
+
     const absMs = Math.abs(totalMs);
     const sign = totalMs > 0 ? "+" : "";
-    
+
     if (absMs < 60000) {
       const seconds = Math.floor(absMs / 1000);
       return `${sign}${seconds}s`;

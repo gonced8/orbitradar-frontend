@@ -7,7 +7,8 @@ import { beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
-    getItem: (key: string): string | null => store[key] || null,
+    getItem: (key: string): string | null =>
+      Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null,
     setItem: (key: string, value: string): void => {
       store[key] = value;
     },

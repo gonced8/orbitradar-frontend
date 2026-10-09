@@ -123,8 +123,8 @@ describe("cache utils", () => {
       expect(localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY)).toBeNull();
     });
 
-    it("handles errors gracefully", () => {
-      // Clear should not throw even if localStorage is in a bad state
+    it("handles empty cache gracefully", () => {
+      // Clear should not throw when cache is already empty
       expect(() => clearCache()).not.toThrow();
     });
   });

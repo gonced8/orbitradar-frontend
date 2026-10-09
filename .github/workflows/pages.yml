@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: pages
+  group: gh-pages-publish
   cancel-in-progress: false
 
 jobs:
@@ -37,5 +37,7 @@ jobs:
         with:
           folder: dist
           branch: gh-pages
-          clean-exclude: pr-preview
+          clean-exclude: |
+            pr-preview
+            data
           force: false

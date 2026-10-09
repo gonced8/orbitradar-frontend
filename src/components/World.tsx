@@ -2,6 +2,7 @@ import React, {
   Suspense,
   lazy,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import { useMultipleTracking } from "../hooks/useMultipleTracking";
 import { usePassPrediction } from "../hooks/usePassPrediction";
 import { useSettings } from "../hooks/useSettings";
 import { useDialogFocus } from "../hooks/useDialogFocus";
+import GlobeErrorBoundary from "./GlobeErrorBoundary";
 import {
   formatCoordinate,
   ALTITUDE_FILTERS,
@@ -33,8 +35,45 @@ const SatelliteMarkers = lazy(() => import("./SatelliteMarkers"));
 
 const World: React.FC = () => {
   const globeEl = useRef<GlobeMethods | undefined>();
+  const globeContainerRef = useRef<HTMLDivElement>(null);
   const [globeReady, setGlobeReady] = useState(false);
+  const [globeSize, setGlobeSize] = useState({ width: 0, height: 0 });
+  const [globeContextLost, setGlobeContextLost] = useState(false);
+  const [globeRetryKey, setGlobeRetryKey] = useState(0);
   const { settings, updateSetting, resetSettings } = useSettings();
+
+  useLayoutEffect(() => {
+    const container = globeContainerRef.current;
+    if (!container) return;
+    const resize = () => {
+      const bounds = container.getBoundingClientRect();
+      setGlobeSize({
+        width: Math.max(0, Math.floor(bounds.width)),
+        height: Math.max(0, Math.floor(bounds.height)),
+      });
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", resize);
+      return () => window.removeEventListener("resize", resize);
+    }
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const canvas = globeContainerRef.current?.querySelector("canvas");
+    if (!canvas) return;
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setGlobeContextLost(true);
+      setGlobeReady(false);
+    };
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+    return () =>
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+  }, [globeReady, globeRetryKey]);
 
   // Custom hooks
   const {
@@ -244,61 +283,106 @@ const World: React.FC = () => {
         : searchResults;
   return (
     <div className="relative h-full w-full overflow-hidden bg-black sm:flex">
-      <div className="absolute inset-0 z-0 sm:left-[22.5rem]">
-        <Suspense
-          fallback={
-            <div
-              role="status"
-              className="flex h-full items-center justify-center text-cyan-200"
+      <div
+        ref={globeContainerRef}
+        className="absolute inset-0 z-0 sm:left-[22.5rem]"
+      >
+        {globeContextLost ? (
+          <div
+            className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-950 px-6 text-center text-white"
+            role="alert"
+          >
+            <p className="text-lg font-bold">
+              The globe lost its graphics context.
+            </p>
+            <p className="text-sm text-slate-300">
+              The satellite explorer remains available.
+            </p>
+            <button
+              className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950"
+              onClick={() => {
+                setGlobeContextLost(false);
+                setGlobeReady(false);
+                setGlobeRetryKey((key) => key + 1);
+              }}
+              type="button"
             >
-              Loading globe…
-            </div>
-          }
-        >
-          <Globe
-            ref={globeEl}
-            onGlobeReady={() => {
-              setGlobeReady(true);
-              globeEl.current?.pointOfView({ altitude: 3.2 });
+              Retry globe
+            </button>
+          </div>
+        ) : (
+          <GlobeErrorBoundary
+            key={globeRetryKey}
+            onRetry={() => {
+              setGlobeReady(false);
+              setGlobeRetryKey((key) => key + 1);
             }}
-            globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-            backgroundColor="black"
-            showAtmosphere
-            labelsData={userLocation ? [userLocation] : []}
-            labelLat="lat"
-            labelLng="lng"
-            labelText="name"
-            labelColor={() => "rgba(255, 165, 0, 0.9)"}
-            labelSize={1}
-            labelDotRadius={0.5}
-            pathsData={
-              orbitPoints.length > 0
-                ? [{ points: orbitPoints, color: selectedPosition?.color }]
-                : []
-            }
-            pathPoints="points"
-            pathPointLat="lat"
-            pathPointLng="lng"
-            pathPointAlt="alt"
-            pathColor={(path: object) =>
-              `${(path as { color?: string }).color ?? "#67e8f9"}cc`
-            }
-            pathStroke={0.5}
-            pathTransitionDuration={0}
-          />
-          {globeReady && (
-            <Suspense fallback={null}>
-              <SatelliteMarkers
-                globe={globeEl.current ?? null}
-                positions={visiblePositions}
-                selectedNoradId={selectedNoradId}
-                trackedNoradIds={trackedNoradIds}
-                getTrackedColor={getTrackedColor}
-                onSelect={selectSatellite}
-              />
+          >
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  className="flex h-full items-center justify-center text-cyan-200"
+                >
+                  Loading globe…
+                </div>
+              }
+            >
+              {globeSize.width > 0 && globeSize.height > 0 && (
+                <Globe
+                  ref={globeEl}
+                  width={globeSize.width}
+                  height={globeSize.height}
+                  onGlobeReady={() => {
+                    setGlobeReady(true);
+                    globeEl.current?.pointOfView({ altitude: 3.2 });
+                  }}
+                  globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+                  backgroundColor="black"
+                  showAtmosphere
+                  labelsData={userLocation ? [userLocation] : []}
+                  labelLat="lat"
+                  labelLng="lng"
+                  labelText="name"
+                  labelColor={() => "rgba(255, 165, 0, 0.9)"}
+                  labelSize={1}
+                  labelDotRadius={0.5}
+                  pathsData={
+                    orbitPoints.length > 0
+                      ? [
+                          {
+                            points: orbitPoints,
+                            color: selectedPosition?.color,
+                          },
+                        ]
+                      : []
+                  }
+                  pathPoints="points"
+                  pathPointLat="lat"
+                  pathPointLng="lng"
+                  pathPointAlt="alt"
+                  pathColor={(path: object) =>
+                    `${(path as { color?: string }).color ?? "#67e8f9"}cc`
+                  }
+                  pathStroke={0.5}
+                  pathTransitionDuration={0}
+                />
+              )}
+              {globeReady && (
+                <Suspense fallback={null}>
+                  <SatelliteMarkers
+                    globe={globeEl.current ?? null}
+                    positions={visiblePositions}
+                    selectedNoradId={selectedNoradId}
+                    trackedNoradIds={trackedNoradIds}
+                    getTrackedColor={getTrackedColor}
+                    onSelect={selectSatellite}
+                  />
+                </Suspense>
+              )}
             </Suspense>
-          )}
-        </Suspense>
+          </GlobeErrorBoundary>
+        )}
       </div>
 
       {/* Compact Info Panel (when controls closed) */}
@@ -333,6 +417,17 @@ const World: React.FC = () => {
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </p>
             )}
+            <p className="mt-1 text-xs text-slate-500">
+              Orbital data:{" "}
+              <a
+                className="underline"
+                href="https://celestrak.org/"
+                rel="noreferrer"
+                target="_blank"
+              >
+                CelesTrak
+              </a>
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
@@ -625,7 +720,7 @@ const World: React.FC = () => {
           </div>
           {isLoading && (
             <p className="mt-3 text-xs text-slate-400">
-              Fetching one bulk catalog from CelesTrak\u2026
+              Loading the shared satellite snapshot\u2026
             </p>
           )}
           {locationError && (
@@ -638,6 +733,17 @@ const World: React.FC = () => {
               Last updated: {new Date(lastUpdated).toLocaleString()}
             </p>
           )}
+          <p className="mt-1 text-xs text-slate-500">
+            Orbital data:{" "}
+            <a
+              className="underline"
+              href="https://celestrak.org/"
+              rel="noreferrer"
+              target="_blank"
+            >
+              CelesTrak
+            </a>
+          </p>
           {trackedNoradIds.length > 0 && (
             <div className="mt-3">
               <p className="text-xs text-slate-400 mb-2">

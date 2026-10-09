@@ -93,12 +93,7 @@ export const usePassPrediction = (
         requestId,
         location: { lat: userLocation.lat, lng: userLocation.lng },
         startTime: startTime.getTime(),
-        satellites: selected.map(({ noradId, name, line1, line2 }) => ({
-          noradId,
-          name,
-          line1,
-          line2,
-        })),
+        satellites: selected,
       });
     },
     [trackedSatellites, userLocation, startTime],

@@ -14,7 +14,11 @@ export const propagatePosition = (
   at: Date,
 ): SatellitePosition | null => {
   const propagated = satellite.propagate(tracked.satrec, at);
-  if (!propagated.position || typeof propagated.position !== "object") {
+  if (
+    !propagated ||
+    !propagated.position ||
+    typeof propagated.position !== "object"
+  ) {
     return null;
   }
   const geodetic = satellite.eciToGeodetic(

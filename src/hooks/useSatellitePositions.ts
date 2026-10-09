@@ -24,16 +24,7 @@ export const useSatellitePositions = (
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const effectiveTime = externalTime ?? liveTime;
-  const catalogTles = useMemo(
-    () =>
-      trackedSatellites.map(({ noradId, name, line1, line2 }) => ({
-        noradId,
-        name,
-        line1,
-        line2,
-      })),
-    [trackedSatellites],
-  );
+  const catalogTles = useMemo(() => trackedSatellites, [trackedSatellites]);
   const latestRef = useRef({
     trackedSatellites,
     selectedNoradId,

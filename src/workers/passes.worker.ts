@@ -43,7 +43,11 @@ const calculate = async (request: Request, activeId: number) => {
       const elevationAt = (timestamp: number) => {
         const at = new Date(timestamp);
         const propagated = satellite.propagate(sat.satrec, at);
-        if (!propagated.position || typeof propagated.position !== "object")
+        if (
+          !propagated ||
+          !propagated.position ||
+          typeof propagated.position !== "object"
+        )
           return -Math.PI / 2;
         const ecf = satellite.eciToEcf(
           propagated.position as satellite.EciVec3<number>,

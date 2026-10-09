@@ -1,0 +1,57 @@
+name: Refresh shared satellite catalog
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_probe:
+        description: Make one source request even when publisher status is paused
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-publish
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check out published site data
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: site
+
+      - name: Refresh catalog with cooldown and validation
+        env:
+          FORCE_PROBE: ${{ inputs.force_probe || false }}
+        run: |
+          args=(--site-dir site)
+          if [[ "$FORCE_PROBE" == "true" ]]; then args+=(--force-probe); fi
+          node scripts/refresh-catalog.mjs "${args[@]}"
+
+      - name: Publish catalog status and snapshot
+        working-directory: site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data
+          if git diff --cached --quiet; then
+            echo "Catalog snapshot and status are unchanged."
+          else
+            git commit -m "Refresh shared satellite catalog"
+            git push origin gh-pages
+          fi

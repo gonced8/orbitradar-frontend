@@ -36,12 +36,15 @@ const FEATURED_COLORS = new Map<number, string>([
 
 // Altitude-based colors
 export const ALTITUDE_COLORS = {
-  leo: "#67e8f9",    // < 2000 km (Cyan)
-  meo: "#a78bfa",    // < 20000 km (Purple)
-  geo: "#f9a8d4",    // >= 20000 km (Pink)
+  leo: "#67e8f9", // < 2000 km (Cyan)
+  meo: "#a78bfa", // < 20000 km (Purple)
+  geo: "#f9a8d4", // >= 20000 km (Pink)
 } as const;
 
-export const getSatelliteColor = (noradId: number, altitudeKm: number): string => {
+export const getSatelliteColor = (
+  noradId: number,
+  altitudeKm: number,
+): string => {
   const featuredColor = FEATURED_COLORS.get(noradId);
   if (featuredColor) return featuredColor;
   if (altitudeKm < 2000) return ALTITUDE_COLORS.leo;
@@ -49,7 +52,11 @@ export const getSatelliteColor = (noradId: number, altitudeKm: number): string =
   return ALTITUDE_COLORS.geo;
 };
 
-export const formatCoordinate = (value: number, positive: string, negative: string): string =>
+export const formatCoordinate = (
+  value: number,
+  positive: string,
+  negative: string,
+): string =>
   `${Math.abs(value).toFixed(2)}\u00b0 ${value >= 0 ? positive : negative}`;
 
 export const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
@@ -77,7 +84,9 @@ export const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
   return catalog;
 };
 
-export const buildTrackedSatellite = (tle: SatelliteTle): TrackedSatellite | null => {
+export const buildTrackedSatellite = (
+  tle: SatelliteTle,
+): TrackedSatellite | null => {
   const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
   if (satrec.error) return null;
   return {
@@ -91,26 +100,26 @@ export const buildTrackedSatellite = (tle: SatelliteTle): TrackedSatellite | nul
 export const estimateAltitudeFromPeriod = (periodSeconds: number): number => {
   const GM = 3.986e14; // Earth's gravitational parameter in m^3/s^2
   const T = periodSeconds;
-  const a = Math.pow((T * T * GM) / (4 * Math.PI * Math.PI), 1/3);
+  const a = Math.pow((T * T * GM) / (4 * Math.PI * Math.PI), 1 / 3);
   const altitudeMeters = a - EARTH_RADIUS_KM * 1000;
   return altitudeMeters / 1000; // Convert to km
 };
 
 // Classify satellite by altitude
-export type AltitudeClass = 'leo' | 'meo' | 'geo';
+export type AltitudeClass = "leo" | "meo" | "geo";
 
 export const getAltitudeClass = (altitudeKm: number): AltitudeClass => {
-  if (altitudeKm < 2000) return 'leo';
-  if (altitudeKm < 20000) return 'meo';
-  return 'geo';
+  if (altitudeKm < 2000) return "leo";
+  if (altitudeKm < 20000) return "meo";
+  return "geo";
 };
 
 // Altitude filters
 export const ALTITUDE_FILTERS = {
-  all: { label: 'All', value: 'all' },
-  leo: { label: 'LEO (< 2000 km)', value: 'leo' },
-  meo: { label: 'MEO (2-20k km)', value: 'meo' },
-  geo: { label: 'GEO (20k+ km)', value: 'geo' },
+  all: { label: "All", value: "all" },
+  leo: { label: "LEO (< 2000 km)", value: "leo" },
+  meo: { label: "MEO (2-20k km)", value: "meo" },
+  geo: { label: "GEO (20k+ km)", value: "geo" },
 } as const;
 
 export type AltitudeFilter = keyof typeof ALTITUDE_FILTERS;

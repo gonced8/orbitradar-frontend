@@ -4,7 +4,8 @@
 const CACHE_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 export const SATELLITE_CACHE_KEY = "orbitradar_active_satellite_tles_v2";
-export const SATELLITE_CACHE_TIMESTAMP_KEY = "orbitradar_active_satellite_timestamp_v2";
+export const SATELLITE_CACHE_TIMESTAMP_KEY =
+  "orbitradar_active_satellite_timestamp_v2";
 
 import { SatelliteTle } from "./satellite";
 
@@ -36,7 +37,10 @@ export const readCache = (allowStale = false): SatelliteTle[] | null => {
 export const writeCache = (satellites: SatelliteTle[]): void => {
   try {
     localStorage.setItem(SATELLITE_CACHE_KEY, JSON.stringify({ satellites }));
-    localStorage.setItem(SATELLITE_CACHE_TIMESTAMP_KEY, new Date().toISOString());
+    localStorage.setItem(
+      SATELLITE_CACHE_TIMESTAMP_KEY,
+      new Date().toISOString(),
+    );
   } catch (error) {
     console.warn("Satellite catalog could not be cached:", error);
   }

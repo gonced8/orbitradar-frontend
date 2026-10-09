@@ -65,6 +65,7 @@ test("can open the time-lapse dialog with fixture catalog data", async ({
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Close control panel" }).click();
   await page.getByRole("button", { name: "Time Lapse" }).first().click();
   await expect(
     page.getByRole("dialog", { name: "Time Lapse Controls" }),

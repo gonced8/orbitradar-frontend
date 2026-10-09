@@ -17,14 +17,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 }) => {
   const dialogRef = useDialogFocus<HTMLElement>(true, onClose);
   return (
-    <div
-      aria-modal="true"
-      className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      role="dialog"
-    >
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
       <section
         ref={dialogRef}
         tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
         aria-labelledby="settings-title"
         className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
       >

@@ -38,6 +38,35 @@
 :root[data-theme="light"] .text-white {
   color: #0f172a;
 }
+:root[data-theme="light"] .text-slate-300 {
+  color: #334155;
+}
+:root[data-theme="light"] .text-slate-400 {
+  color: #475569;
+}
+:root[data-theme="light"] .text-slate-500 {
+  color: #64748b;
+}
+:root[data-theme="light"] .text-cyan-100,
+:root[data-theme="light"] .text-cyan-200,
+:root[data-theme="light"] .text-cyan-300 {
+  color: #0e7490;
+}
+:root[data-theme="light"] .text-amber-300 {
+  color: #b45309;
+}
+:root[data-theme="light"] .text-blue-400 {
+  color: #1d4ed8;
+}
+:root[data-theme="light"] .text-green-400 {
+  color: #15803d;
+}
+:root[data-theme="light"] .text-red-400 {
+  color: #b91c1c;
+}
+:root[data-theme="light"] .text-yellow-400 {
+  color: #a16207;
+}
 
 * {
   box-sizing: border-box;

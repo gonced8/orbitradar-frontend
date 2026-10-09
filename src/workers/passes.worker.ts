@@ -24,7 +24,7 @@ self.onmessage = (event: MessageEvent<Request>) => {
 
 let latestRequestId = 0;
 
-const calculate = (request: Request, activeId: number) => {
+const calculate = async (request: Request, activeId: number) => {
   if (activeId !== latestRequestId) return;
   const { requestId, startTime, location, satellites } = request;
   try {
@@ -56,6 +56,7 @@ const calculate = (request: Request, activeId: number) => {
       let riseTime = previousElevation >= 0 ? previousTime : null;
       let peakTime = previousTime;
       let peakElevation = previousElevation;
+      let stepsSinceYield = 0;
       for (
         let currentTime = previousTime + stepMs;
         currentTime <= end.getTime();
@@ -122,6 +123,11 @@ const calculate = (request: Request, activeId: number) => {
         }
         previousTime = currentTime;
         previousElevation = currentElevation;
+        if (++stepsSinceYield >= 120) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          if (activeId !== latestRequestId) return;
+          stepsSinceYield = 0;
+        }
       }
       if (riseTime !== null) {
         results.push({

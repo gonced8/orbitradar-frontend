@@ -500,7 +500,7 @@ const World: React.FC = () => {
             <p className="text-xs text-slate-400">
               NORAD {selectedPosition.noradId}
               {altitudeFilter !== "all" &&
-              getAltitudeClass(selectedPosition.altitudeKm) !== altitudeFilter
+              selectedPosition.altitudeClass !== altitudeFilter
                 ? " · Outside current filter"
                 : ""}
             </p>
@@ -564,13 +564,15 @@ const World: React.FC = () => {
             </ControlButton>
             <ControlButton
               onClick={() => {
+                setLocationError(null);
                 void locateUser()
-                  .then((location) =>
+                  .then((location) => {
+                    setLocationError(null);
                     globeEl.current?.pointOfView(
                       { lat: location.lat, lng: location.lng, altitude: 1.5 },
                       1000,
-                    ),
-                  )
+                    );
+                  })
                   .catch(() =>
                     setLocationError(
                       "Location access failed. Check browser permission and try again.",
@@ -655,14 +657,12 @@ const World: React.FC = () => {
 
       {/* Favorites Panel */}
       {showFavorites && (
-        <div
-          aria-modal="true"
-          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
-          role="dialog"
-        >
+        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6">
           <section
             ref={favoritesDialogRef}
             tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
             aria-labelledby="favorites-title"
             className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
           >
@@ -744,14 +744,12 @@ const World: React.FC = () => {
 
       {/* Time Lapse Controls */}
       {showTimeLapseControls && (
-        <div
-          aria-modal="true"
-          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
-          role="dialog"
-        >
+        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6">
           <section
             ref={timeLapseDialogRef}
             tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
             aria-labelledby="timelapse-title"
             className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
           >
@@ -847,13 +845,9 @@ const World: React.FC = () => {
             setShowPassPrediction(false);
           }}
           onCalculateTracked={() => {
-            calculateForTracked(
-              trackedNoradIds.length
-                ? trackedNoradIds
-                : selectedPosition
-                  ? [selectedPosition.noradId]
-                  : [],
-            );
+            calculateForTracked([
+              ...new Set([...trackedNoradIds, selectedPosition.noradId]),
+            ]);
           }}
           selectedSatelliteName={getSelectedSatelliteName()}
         />
@@ -871,14 +865,12 @@ const World: React.FC = () => {
 
       {/* Catalog Panel */}
       {showCatalog && (
-        <div
-          aria-modal="true"
-          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
-          role="dialog"
-        >
+        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6">
           <section
             ref={catalogDialogRef}
             tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
             aria-labelledby="catalog-title"
             className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
           >

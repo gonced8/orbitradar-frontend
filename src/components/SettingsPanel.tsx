@@ -78,7 +78,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       ? "bg-cyan-500/20 text-cyan-300"
                       : "bg-white/10 text-slate-400"
                   }`}
-                  onClick={() => onUpdate("showOrbitsByDefault", !settings.showOrbitsByDefault)}
+                  onClick={() =>
+                    onUpdate(
+                      "showOrbitsByDefault",
+                      !settings.showOrbitsByDefault,
+                    )
+                  }
                   type="button"
                 >
                   {settings.showOrbitsByDefault ? "ON" : "OFF"}
@@ -96,7 +101,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </label>
               <select
                 className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
-                onChange={(e) => onUpdate("defaultAltitudeFilter", e.target.value)}
+                onChange={(e) =>
+                  onUpdate("defaultAltitudeFilter", e.target.value)
+                }
                 value={settings.defaultAltitudeFilter}
               >
                 <option value="all">All Satellites</option>
@@ -137,7 +144,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </label>
                 <select
                   className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
-                  onChange={(e) => onUpdate("refreshIntervalHours", Number(e.target.value))}
+                  onChange={(e) =>
+                    onUpdate("refreshIntervalHours", Number(e.target.value))
+                  }
                   value={settings.refreshIntervalHours}
                 >
                   <option value={1}>1 hour</option>

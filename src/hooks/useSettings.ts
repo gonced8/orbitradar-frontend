@@ -46,7 +46,7 @@ export const useSettings = () => {
     <K extends keyof Settings>(key: K, value: Settings[K]) => {
       setSettings((prev) => ({ ...prev, [key]: value }));
     },
-    []
+    [],
   );
 
   // Reset to defaults

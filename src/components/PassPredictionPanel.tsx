@@ -28,7 +28,8 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
     return date.toLocaleDateString([], {
       month: "short",
       day: "numeric",
-      year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+      year:
+        date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
     });
   };
 
@@ -88,7 +89,8 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
             <div className="p-4 text-center text-slate-400">
               <p>No passes found for this satellite in the next 24 hours.</p>
               <p className="mt-2 text-sm">
-                The satellite may not pass over your location, or its orbit may not be visible.
+                The satellite may not pass over your location, or its orbit may
+                not be visible.
               </p>
             </div>
           )}
@@ -103,9 +105,7 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">
-                          Pass #{index + 1}
-                        </p>
+                        <p className="font-semibold">Pass #{index + 1}</p>
                         <p className="text-sm text-slate-400">
                           {formatDate(pass.riseTime)}
                         </p>
@@ -115,8 +115,8 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                           pass.maxElevationDeg >= 60
                             ? "bg-green-500/20 text-green-400"
                             : pass.maxElevationDeg >= 30
-                            ? "bg-yellow-500/20 text-yellow-400"
-                            : "bg-blue-500/20 text-blue-400"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : "bg-blue-500/20 text-blue-400"
                         }`}
                       >
                         Max: {pass.maxElevationDeg.toFixed(1)}°
@@ -125,15 +125,21 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                     <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
                       <div className="rounded-lg bg-white/10 p-2 text-center">
                         <p className="text-slate-400">Rise</p>
-                        <p className="font-semibold">{formatTime(pass.riseTime)}</p>
+                        <p className="font-semibold">
+                          {formatTime(pass.riseTime)}
+                        </p>
                       </div>
                       <div className="rounded-lg bg-white/10 p-2 text-center">
                         <p className="text-slate-400">Peak</p>
-                        <p className="font-semibold">{formatTime(pass.maxElevationTime)}</p>
+                        <p className="font-semibold">
+                          {formatTime(pass.maxElevationTime)}
+                        </p>
                       </div>
                       <div className="rounded-lg bg-white/10 p-2 text-center">
                         <p className="text-slate-400">Set</p>
-                        <p className="font-semibold">{formatTime(pass.setTime)}</p>
+                        <p className="font-semibold">
+                          {formatTime(pass.setTime)}
+                        </p>
                       </div>
                     </div>
                     <div className="mt-2 text-center text-xs text-slate-400">

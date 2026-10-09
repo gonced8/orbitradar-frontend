@@ -1,15 +1,32 @@
 import { useState, useEffect, useMemo } from "react";
 import * as satellite from "satellite.js";
 import {
-  EARTH_RADIUS_KM,
   SatellitePosition,
   TrackedSatellite,
   getSatelliteColor,
 } from "../utils/satellite";
 
+// Performance optimizations
 const POSITION_TICK_MS = 1000;
-const MARKER_ALTITUDE = 0.008;
 const ORBIT_POINTS = 60;
+const ALTITUDE_SCALE = 0.0005;
+const MIN_VISUAL_ALTITUDE = 0.005;
+
+// Limit the number of satellites to render for performance
+const MAX_RENDERED_SATELLITES = 2000;
+
+// Cache GMST calculation to avoid redundant computations
+let cachedGmst: number | null = null;
+let cachedGmstTime: number | null = null;
+
+const getCachedGmst = (time: Date): number => {
+  if (cachedGmst && cachedGmstTime && time.getTime() === cachedGmstTime) {
+    return cachedGmst;
+  }
+  cachedGmst = satellite.gstime(time);
+  cachedGmstTime = time.getTime();
+  return cachedGmst;
+};
 
 export const useSatellitePositions = (
   trackedSatellites: TrackedSatellite[],
@@ -28,34 +45,50 @@ export const useSatellitePositions = (
     return () => window.clearInterval(timer);
   }, []);
 
-  const effectiveTime = externalTime ?? time;
+  const effectiveTime = useMemo(
+    () => externalTime ?? time,
+    [externalTime, time],
+  );
 
   const satellitePositions = useMemo<SatellitePosition[]>(() => {
     if (trackedSatellites.length === 0) return [];
 
-    const gmst = satellite.gstime(effectiveTime);
-    return trackedSatellites
+    // Use cached GMST for performance
+    const gmst = getCachedGmst(effectiveTime);
+
+    // Limit to max rendered satellites for performance
+    const satellitesToRender = trackedSatellites.slice(
+      0,
+      MAX_RENDERED_SATELLITES,
+    );
+
+    return satellitesToRender
       .map((tracked) => {
         const propagated = satellite.propagate(tracked.satrec, effectiveTime);
         if (!propagated.position) return null;
+
         const geodetic = satellite.eciToGeodetic(
           propagated.position as satellite.EciVec3<number>,
           gmst,
         );
+
         const velocity =
           propagated.velocity && typeof propagated.velocity === "object"
             ? (propagated.velocity as satellite.EciVec3<number>)
             : null;
-        const altitudeKm = geodetic.height;
+
+        const altitudeKm = geodetic.height / 1000; // Convert meters to km
+        const visualAlt = altitudeKm * ALTITUDE_SCALE; // Scale for visual representation
+
         return {
           noradId: tracked.noradId,
           name: tracked.name,
           lat: satellite.degreesLat(geodetic.latitude),
           lng: satellite.degreesLong(geodetic.longitude),
-          alt: Math.max(altitudeKm / EARTH_RADIUS_KM, 0.005),
+          alt: Math.max(visualAlt, MIN_VISUAL_ALTITUDE),
           altitudeKm,
           velocityKph: velocity
-            ? Math.hypot(velocity.x, velocity.y, velocity.z) * 3600
+            ? Math.hypot(velocity.x, velocity.y, velocity.z) * 3.6
             : null,
           color: getSatelliteColor(tracked.noradId, altitudeKm),
         };
@@ -91,10 +124,11 @@ export const useSatellitePositions = (
         propagated.position as satellite.EciVec3<number>,
         satellite.gstime(propagationTime),
       );
+      const altitudeKm = geodetic.height / 1000;
       points.push({
         lat: satellite.degreesLat(geodetic.latitude),
         lng: satellite.degreesLong(geodetic.longitude),
-        alt: geodetic.height / EARTH_RADIUS_KM,
+        alt: Math.max(altitudeKm * ALTITUDE_SCALE, MIN_VISUAL_ALTITUDE),
       });
     }
     return points;
@@ -109,6 +143,5 @@ export const useSatellitePositions = (
     setShowOrbit,
     followSelected,
     setFollowSelected,
-    MARKER_ALTITUDE,
   };
 };

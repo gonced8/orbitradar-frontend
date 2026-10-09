@@ -526,10 +526,10 @@ const World: React.FC = () => {
       {showTimeLapseControls && (
         <div
           aria-modal="true"
-          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+          className="absolute bottom-4 right-4 z-50 w-full max-w-md p-3 sm:p-4"
           role="dialog"
         >
-          <section className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+          <section className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md">
             <header className="flex items-start justify-between gap-4 border-b border-white/10 p-4 sm:p-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
@@ -543,12 +543,7 @@ const World: React.FC = () => {
               <button
                 aria-label="Close time lapse controls"
                 className="rounded-full bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
-                onClick={() => {
-                  if (isTimeLapseActive) {
-                    resetTime();
-                  }
-                  setShowTimeLapseControls(false);
-                }}
+                onClick={() => setShowTimeLapseControls(false)}
                 type="button"
               >
                 Close

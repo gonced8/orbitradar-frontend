@@ -6,29 +6,27 @@ export type TimeLapseSpeed = (typeof TIME_LAPSE_SPEEDS)[number];
 
 export const useTimeLapse = () => {
   const [isTimeLapseActive, setIsTimeLapseActive] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [speed, setSpeed] = useState<TimeLapseSpeed>(1);
-  const [timeOffsetMs, setTimeOffsetMs] = useState<number>(0);
-  const [startTimestamp, setStartTimestamp] = useState<number>(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [simulationTimeMs, setSimulationTimeMs] = useState<number>(() =>
+    Date.now(),
+  );
+  const [updatedAt, setUpdatedAt] = useState<number>(() => Date.now());
+  const lastTickRef = useRef(Date.now());
 
   const speeds = TIME_LAPSE_SPEEDS;
 
   // Calculate effective time
   const getEffectiveTime = useCallback((): Date => {
-    if (!isTimeLapseActive) return new Date();
-    const now = Date.now();
-    const elapsedMs = now - startTimestamp;
-    const totalOffsetMs = timeOffsetMs + elapsedMs * speed;
-    return new Date(now + totalOffsetMs);
-  }, [isTimeLapseActive, speed, timeOffsetMs, startTimestamp]);
+    if (!isTimeLapseActive)
+      return new Date(isPaused ? simulationTimeMs : Date.now());
+    return new Date(simulationTimeMs + (Date.now() - updatedAt) * speed);
+  }, [isTimeLapseActive, isPaused, speed, simulationTimeMs, updatedAt]);
 
   // Format time offset for display
   const getTimeOffsetDisplay = useCallback((): string => {
-    if (!isTimeLapseActive && timeOffsetMs === 0) return "Live";
-
-    const totalMs = isTimeLapseActive
-      ? timeOffsetMs + (Date.now() - startTimestamp) * speed
-      : timeOffsetMs;
+    const totalMs = getEffectiveTime().getTime() - Date.now();
+    if (Math.abs(totalMs) < 1000) return "Live";
 
     const absMs = Math.abs(totalMs);
     const sign = totalMs > 0 ? "+" : "";
@@ -43,24 +41,25 @@ export const useTimeLapse = () => {
       const hours = Math.floor(absMs / 3600000);
       return `${sign}${hours}h`;
     }
-  }, [isTimeLapseActive, speed, timeOffsetMs, startTimestamp]);
+  }, [getEffectiveTime]);
 
   const startTimeLapse = useCallback(() => {
-    if (intervalRef.current) return;
+    if (isTimeLapseActive) return;
+    lastTickRef.current = Date.now();
+    const now = Date.now();
+    if (!isPaused) setSimulationTimeMs(now);
+    setUpdatedAt(now);
+    setIsPaused(false);
     setIsTimeLapseActive(true);
-    setStartTimestamp(Date.now());
-    intervalRef.current = setInterval(() => {}, 100);
-  }, []);
+  }, [isTimeLapseActive, isPaused]);
 
   const stopTimeLapse = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    const effectiveTime = getEffectiveTime();
-    const offset = effectiveTime.getTime() - Date.now();
-    setTimeOffsetMs(offset);
+    setSimulationTimeMs(getEffectiveTime().getTime());
+    const now = Date.now();
+    lastTickRef.current = now;
+    setUpdatedAt(now);
     setIsTimeLapseActive(false);
+    setIsPaused(true);
   }, [getEffectiveTime]);
 
   const toggleTimeLapse = useCallback(() => {
@@ -73,32 +72,35 @@ export const useTimeLapse = () => {
 
   const setTimeLapseSpeed = useCallback(
     (newSpeed: TimeLapseSpeed) => {
-      setSpeed(newSpeed);
       if (isTimeLapseActive) {
-        const wasActive = isTimeLapseActive;
-        stopTimeLapse();
-        if (wasActive) {
-          startTimeLapse();
-        }
+        setSimulationTimeMs(getEffectiveTime().getTime());
+        const now = Date.now();
+        lastTickRef.current = now;
+        setUpdatedAt(now);
       }
+      setSpeed(newSpeed);
     },
-    [isTimeLapseActive, startTimeLapse, stopTimeLapse],
+    [isTimeLapseActive, getEffectiveTime],
   );
 
   const resetTime = useCallback(() => {
-    setTimeOffsetMs(0);
-    if (isTimeLapseActive) {
-      stopTimeLapse();
-    }
-  }, [isTimeLapseActive, stopTimeLapse]);
+    setSimulationTimeMs(Date.now());
+    setUpdatedAt(Date.now());
+    setIsTimeLapseActive(false);
+    setIsPaused(false);
+  }, []);
 
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+    if (!isTimeLapseActive) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - lastTickRef.current;
+      lastTickRef.current = now;
+      setSimulationTimeMs((current) => current + elapsed * speed);
+      setUpdatedAt(now);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isTimeLapseActive, speed]);
 
   const getSpeedLabel = useCallback((s: TimeLapseSpeed): string => {
     if (s === 1) return "1x (Real-time)";
@@ -112,7 +114,7 @@ export const useTimeLapse = () => {
     speed,
     speeds,
     currentTime: getEffectiveTime(),
-    timeOffsetMs,
+    timeOffsetMs: getEffectiveTime().getTime() - Date.now(),
     startTimeLapse,
     stopTimeLapse,
     toggleTimeLapse,

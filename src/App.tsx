@@ -4,11 +4,11 @@ import World from "./components/World";
 const App: React.FC = () => {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-black">
-      <header className="pointer-events-none absolute left-0 right-0 top-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 pb-12 pt-5 text-center text-white">
-        <p className="text-sm font-semibold uppercase tracking-[0.45em] text-cyan-200/90">
+      <header className="pointer-events-none absolute left-0 right-0 top-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 pb-10 pt-4 text-center text-white sm:left-[22.5rem]">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-200/90">
           Orbit Radar
         </p>
-        <h1 className="mt-2 text-4xl font-black drop-shadow-lg sm:text-6xl">
+        <h1 className="mt-1 text-2xl font-black drop-shadow-lg sm:text-4xl">
           Satellite Tracker
         </h1>
       </header>

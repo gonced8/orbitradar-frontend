@@ -1,12 +1,13 @@
 import React from "react";
 import { SatellitePass } from "../hooks/usePassPrediction";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 type PassPredictionPanelProps = {
   passes: SatellitePass[];
   isCalculating: boolean;
   error: string | null;
   onClose: () => void;
-  onCalculateAll: () => void;
+  onCalculateTracked: () => void;
   selectedSatelliteName: string;
 };
 
@@ -15,9 +16,10 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
   isCalculating,
   error,
   onClose,
-  onCalculateAll,
+  onCalculateTracked,
   selectedSatelliteName,
 }) => {
+  const dialogRef = useDialogFocus(true, onClose);
   // Format time
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -49,17 +51,23 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       role="dialog"
     >
-      <section className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+      <section
+        ref={dialogRef}
+        tabIndex={-1}
+        aria-labelledby="passes-title"
+        className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl"
+      >
         <header className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
               Pass Prediction
             </p>
-            <h2 className="mt-1 text-2xl font-bold">
-              {selectedSatelliteName} Passes
+            <h2 id="passes-title" className="mt-1 text-2xl font-bold">
+              Upcoming satellite passes
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Upcoming passes over your location
+              {selectedSatelliteName} and tracked objects · next 24 hours · over
+              your location
             </p>
           </div>
           <button
@@ -105,7 +113,9 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-semibold">Pass #{index + 1}</p>
+                        <p className="font-semibold">
+                          {pass.name} · Pass #{index + 1}
+                        </p>
                         <p className="text-sm text-slate-400">
                           {formatDate(pass.riseTime)}
                         </p>
@@ -155,10 +165,10 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
         <footer className="border-t border-white/10 p-4">
           <button
             className="w-full rounded-full bg-cyan-500/20 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-500/30"
-            onClick={onCalculateAll}
+            onClick={onCalculateTracked}
             type="button"
           >
-            Calculate All Satellites
+            Predict Selected / Tracked
           </button>
         </footer>
       </section>

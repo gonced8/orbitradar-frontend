@@ -6,7 +6,16 @@ export const useFavorites = () => {
   const [favorites, setFavorites] = useState<number[]>(() => {
     try {
       const saved = localStorage.getItem(FAVORITES_KEY);
-      return saved ? JSON.parse(saved) : [];
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed)
+        ? [
+            ...new Set(
+              parsed.filter(
+                (id): id is number => Number.isSafeInteger(id) && id > 0,
+              ),
+            ),
+          ]
+        : [];
     } catch {
       return [];
     }

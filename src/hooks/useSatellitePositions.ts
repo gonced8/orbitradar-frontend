@@ -9,17 +9,17 @@ import {
 
 const POSITION_TICK_MS = 1000;
 const MARKER_ALTITUDE = 0.008;
-const ORBIT_POINTS = 60; // Reduced from 100 to 60 for better performance
+const ORBIT_POINTS = 60;
 
 export const useSatellitePositions = (
   trackedSatellites: TrackedSatellite[],
   selectedNoradId: number,
+  externalTime?: Date,
 ) => {
   const [time, setTime] = useState(new Date());
   const [showOrbit, setShowOrbit] = useState(true);
   const [followSelected, setFollowSelected] = useState(false);
 
-  // Update time every second
   useEffect(() => {
     const timer = window.setInterval(
       () => setTime(new Date()),
@@ -28,14 +28,15 @@ export const useSatellitePositions = (
     return () => window.clearInterval(timer);
   }, []);
 
-  // Calculate positions for all satellites
+  const effectiveTime = externalTime ?? time;
+
   const satellitePositions = useMemo<SatellitePosition[]>(() => {
     if (trackedSatellites.length === 0) return [];
 
-    const gmst = satellite.gstime(time);
+    const gmst = satellite.gstime(effectiveTime);
     return trackedSatellites
       .map((tracked) => {
-        const propagated = satellite.propagate(tracked.satrec, time);
+        const propagated = satellite.propagate(tracked.satrec, effectiveTime);
         if (!propagated.position) return null;
         const geodetic = satellite.eciToGeodetic(
           propagated.position as satellite.EciVec3<number>,
@@ -60,9 +61,8 @@ export const useSatellitePositions = (
         };
       })
       .filter((item): item is SatellitePosition => Boolean(item));
-  }, [trackedSatellites, time]);
+  }, [trackedSatellites, effectiveTime]);
 
-  // Get selected satellite position
   const selectedPosition = useMemo(() => {
     return (
       satellitePositions.find((item) => item.noradId === selectedNoradId) ??
@@ -70,7 +70,6 @@ export const useSatellitePositions = (
     );
   }, [satellitePositions, selectedNoradId]);
 
-  // Calculate orbit points for selected satellite
   const orbitPoints = useMemo(() => {
     const selectedSatellite = trackedSatellites.find(
       (s) => s.noradId === selectedNoradId,
@@ -82,7 +81,7 @@ export const useSatellitePositions = (
     const stepMs = (selectedSatellite.periodSeconds * 1000) / ORBIT_POINTS;
 
     for (let offset = -halfPeriodMs; offset <= halfPeriodMs; offset += stepMs) {
-      const propagationTime = new Date(time.getTime() + offset);
+      const propagationTime = new Date(effectiveTime.getTime() + offset);
       const propagated = satellite.propagate(
         selectedSatellite.satrec,
         propagationTime,
@@ -99,7 +98,7 @@ export const useSatellitePositions = (
       });
     }
     return points;
-  }, [trackedSatellites, selectedNoradId, showOrbit, time]);
+  }, [trackedSatellites, selectedNoradId, showOrbit, effectiveTime]);
 
   return {
     time,

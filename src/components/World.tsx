@@ -32,30 +32,24 @@ const World: React.FC = () => {
   } = useSatelliteCatalog();
 
   const {
-    satellitePositions,
-    selectedPosition,
-    orbitPoints,
-    showOrbit,
-    setShowOrbit,
-    followSelected,
-    setFollowSelected,
-    MARKER_ALTITUDE,
-  } = useSatellitePositions(trackedSatellites, selectedNoradId);
+    isTimeLapseActive,
+    speed,
+    currentTime,
+    speeds,
+    toggleTimeLapse,
+    setTimeLapseSpeed,
+    resetTime,
+    getSpeedLabel,
+    getTimeOffsetDisplay,
+  } = useTimeLapse();
+
+  const { satellitePositions, selectedPosition, orbitPoints, showOrbit, setShowOrbit, followSelected, setFollowSelected, MARKER_ALTITUDE } = useSatellitePositions(trackedSatellites, selectedNoradId, currentTime);
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
 
   const { favorites, isFavorite, toggleFavorite, clearFavorites } =
     useFavorites();
 
-  const {
-    isTimeLapseActive,
-    speed,
-    speeds,
-    toggleTimeLapse,
-    setTimeLapseSpeed,
-    resetTime,
-    getSpeedLabel,
-  } = useTimeLapse();
 
   const {
     trackedNoradIds,
@@ -231,6 +225,11 @@ const World: React.FC = () => {
             >
               Open panel
             </button>
+            {isTimeLapseActive && (
+              <span className="shrink-0 rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-bold text-cyan-300">
+                Time Lapse: {getTimeOffsetDisplay()}
+              </span>
+            )}
           </div>
           <p className="mt-2 line-clamp-2 text-sm text-slate-400">
             {statusMessage}
@@ -608,6 +607,11 @@ const World: React.FC = () => {
                   >
                     Reset to Now
                   </button>
+                </div>
+                <div className="mt-4 text-center">
+                  <span className="text-sm text-slate-400">
+                    Time: {getTimeOffsetDisplay()}
+                  </span>
                 </div>
               </div>
             </div>

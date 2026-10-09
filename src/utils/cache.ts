@@ -6,7 +6,9 @@ const CACHE_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 export const SATELLITE_CACHE_KEY = "orbitradar_active_satellite_tles_v2";
 export const SATELLITE_CACHE_TIMESTAMP_KEY = "orbitradar_active_satellite_timestamp_v2";
 
-type SatelliteCache = { satellites: any[] };
+import { SatelliteTle } from "./satellite";
+
+type SatelliteCache = { satellites: SatelliteTle[] };
 
 export const isCacheFresh = (timestamp: string | null): boolean => {
   if (!timestamp) return false;
@@ -14,7 +16,7 @@ export const isCacheFresh = (timestamp: string | null): boolean => {
   return !Number.isNaN(cachedAt) && Date.now() - cachedAt < CACHE_DURATION_MS;
 };
 
-export const readCache = (allowStale = false): any[] | null => {
+export const readCache = (allowStale = false): SatelliteTle[] | null => {
   const value = localStorage.getItem(SATELLITE_CACHE_KEY);
   const timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
   if (!value || (!allowStale && !isCacheFresh(timestamp))) return null;
@@ -31,7 +33,7 @@ export const readCache = (allowStale = false): any[] | null => {
   }
 };
 
-export const writeCache = (satellites: any[]): void => {
+export const writeCache = (satellites: SatelliteTle[]): void => {
   try {
     localStorage.setItem(SATELLITE_CACHE_KEY, JSON.stringify({ satellites }));
     localStorage.setItem(SATELLITE_CACHE_TIMESTAMP_KEY, new Date().toISOString());

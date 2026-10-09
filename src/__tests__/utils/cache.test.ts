@@ -43,11 +43,15 @@ describe("cache utils", () => {
 
     it("returns null for stale cache when allowStale is false", () => {
       // Write cache
-      const testSatellites = [{ noradId: 25544, name: "ISS", line1: "1", line2: "2" }];
+      const testSatellites = [
+        { noradId: 25544, name: "ISS", line1: "1", line2: "2" },
+      ];
       writeCache(testSatellites);
 
       // Manually set timestamp to be old (more than 8 hours ago)
-      const oldTimestamp = new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString();
+      const oldTimestamp = new Date(
+        Date.now() - 9 * 60 * 60 * 1000,
+      ).toISOString();
       localStorage.setItem(SATELLITE_CACHE_TIMESTAMP_KEY, oldTimestamp);
 
       // Read without allowing stale
@@ -57,11 +61,15 @@ describe("cache utils", () => {
 
     it("returns stale cache when allowStale is true", () => {
       // Write cache
-      const testSatellites = [{ noradId: 25544, name: "ISS", line1: "1", line2: "2" }];
+      const testSatellites = [
+        { noradId: 25544, name: "ISS", line1: "1", line2: "2" },
+      ];
       writeCache(testSatellites);
 
       // Manually set timestamp to be old (more than 8 hours ago)
-      const oldTimestamp = new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString();
+      const oldTimestamp = new Date(
+        Date.now() - 9 * 60 * 60 * 1000,
+      ).toISOString();
       localStorage.setItem(SATELLITE_CACHE_TIMESTAMP_KEY, oldTimestamp);
 
       // Read with allowing stale
@@ -78,7 +86,9 @@ describe("cache utils", () => {
     });
 
     it("returns false for old cache", () => {
-      const oldTimestamp = new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString();
+      const oldTimestamp = new Date(
+        Date.now() - 9 * 60 * 60 * 1000,
+      ).toISOString();
       expect(isCacheFresh(oldTimestamp)).toBe(false);
     });
 
@@ -94,12 +104,16 @@ describe("cache utils", () => {
   describe("clearCache", () => {
     it("clears cache from localStorage", () => {
       // Write cache
-      const testSatellites = [{ noradId: 25544, name: "ISS", line1: "1", line2: "2" }];
+      const testSatellites = [
+        { noradId: 25544, name: "ISS", line1: "1", line2: "2" },
+      ];
       writeCache(testSatellites);
 
       // Verify cache exists
       expect(localStorage.getItem(SATELLITE_CACHE_KEY)).not.toBeNull();
-      expect(localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY)).not.toBeNull();
+      expect(
+        localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY),
+      ).not.toBeNull();
 
       // Clear cache
       clearCache();
@@ -124,7 +138,10 @@ describe("cache utils", () => {
 
     it("handles corrupted cache data", () => {
       localStorage.setItem(SATELLITE_CACHE_KEY, "invalid json");
-      localStorage.setItem(SATELLITE_CACHE_TIMESTAMP_KEY, new Date().toISOString());
+      localStorage.setItem(
+        SATELLITE_CACHE_TIMESTAMP_KEY,
+        new Date().toISOString(),
+      );
 
       const result = readCache();
       expect(result).toBeNull();

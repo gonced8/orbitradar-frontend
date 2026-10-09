@@ -102,7 +102,9 @@ describe("satellite utils", () => {
     });
 
     it("throws error for empty catalog", () => {
-      expect(() => parseTleCatalog("")).toThrow("CelesTrak returned an unexpected TLE catalog.");
+      expect(() => parseTleCatalog("")).toThrow(
+        "CelesTrak returned an unexpected TLE catalog.",
+      );
     });
 
     it("skips invalid TLE entries", () => {
@@ -132,10 +134,10 @@ TEST-SAT
     it("returns higher altitude for longer periods", () => {
       const shortPeriod = 90 * 60; // 90 minutes
       const longPeriod = 1440 * 60; // 24 hours (geostationary)
-      
+
       const shortAltitude = estimateAltitudeFromPeriod(shortPeriod);
       const longAltitude = estimateAltitudeFromPeriod(longPeriod);
-      
+
       expect(longAltitude).toBeGreaterThan(shortAltitude);
     });
   });

@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import catalog from "./fixtures/catalog.json";
+import { readFileSync } from "node:fs";
+
+const catalog = JSON.parse(
+  readFileSync(new URL("./fixtures/catalog.json", import.meta.url), "utf8"),
+);
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/data/catalog.json", (route) =>

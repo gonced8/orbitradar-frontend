@@ -123,7 +123,7 @@ const World: React.FC = () => {
     if (settings.showOrbitsByDefault) {
       setShowOrbit(true);
     }
-  }, [settings.showOrbitsByDefault]);
+  }, [settings.showOrbitsByDefault, setShowOrbit]);
 
   // Filter satellites by altitude
   const filteredSatellites = useMemo(() => {

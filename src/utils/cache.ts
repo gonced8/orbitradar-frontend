@@ -1,13 +1,13 @@
 // utils/cache.ts
 // Cache management functions for localStorage
 
+import { SatelliteTle } from "./satellite";
+
 const CACHE_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 export const SATELLITE_CACHE_KEY = "orbitradar_active_satellite_tles_v2";
 export const SATELLITE_CACHE_TIMESTAMP_KEY =
   "orbitradar_active_satellite_timestamp_v2";
-
-import { SatelliteTle } from "./satellite";
 
 type SatelliteCache = { satellites: SatelliteTle[] };
 

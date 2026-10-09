@@ -3,6 +3,9 @@ import Globe, { GlobeMethods } from "react-globe.gl";
 import { useSatelliteCatalog } from "../hooks/useSatelliteCatalog";
 import { useSatellitePositions } from "../hooks/useSatellitePositions";
 import { useUserLocation } from "../hooks/useUserLocation";
+import { useFavorites } from "../hooks/useFavorites";
+import { useTimeLapse } from "../hooks/useTimeLapse";
+import { useMultipleTracking } from "../hooks/useMultipleTracking";
 import {
   SatellitePosition,
   formatCoordinate,
@@ -29,6 +32,18 @@ const World: React.FC = () => {
   } = useSatelliteCatalog();
 
   const {
+    isTimeLapseActive,
+    speed,
+    currentTime,
+    speeds,
+    toggleTimeLapse,
+    setTimeLapseSpeed,
+    resetTime,
+    getSpeedLabel,
+    getTimeOffsetDisplay,
+  } = useTimeLapse();
+
+  const {
     satellitePositions,
     selectedPosition,
     orbitPoints,
@@ -37,14 +52,27 @@ const World: React.FC = () => {
     followSelected,
     setFollowSelected,
     MARKER_ALTITUDE,
-  } = useSatellitePositions(trackedSatellites, selectedNoradId);
+  } = useSatellitePositions(trackedSatellites, selectedNoradId, currentTime);
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
+
+  const { favorites, isFavorite, toggleFavorite, clearFavorites } =
+    useFavorites();
+
+  const {
+    trackedNoradIds,
+    isTracked,
+    toggleTracked,
+    clearTracked,
+    getTrackedColor,
+  } = useMultipleTracking(satellitePositions);
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
   const [showControls, setShowControls] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [showTimeLapseControls, setShowTimeLapseControls] = useState(false);
   const [catalogPage, setCatalogPage] = useState(0);
   const [altitudeFilter, setAltitudeFilter] = useState<AltitudeFilter>("all");
 
@@ -65,16 +93,18 @@ const World: React.FC = () => {
   // Filter satellites by altitude
   const filteredSatellites = useMemo(() => {
     if (altitudeFilter === "all") return trackedSatellites;
-    return trackedSatellites.filter((sat) => {
-      const altitudeEstimate =
-        Math.pow(
-          ((sat.periodSeconds * 60) / (2 * Math.PI)) ** 2 * 3.986e14,
-          1 / 3,
-        ) - 6371000;
-      const altitudeKm = altitudeEstimate / 1000;
-      const altitudeClass = getAltitudeClass(altitudeKm);
-      return altitudeClass === altitudeFilter;
-    });
+    return trackedSatellites.filter(
+      (sat: { noradId: number; name: string; periodSeconds: number }) => {
+        const altitudeEstimate =
+          Math.pow(
+            ((sat.periodSeconds * 60) / (2 * Math.PI)) ** 2 * 3.986e14,
+            1 / 3,
+          ) - 6371000;
+        const altitudeKm = altitudeEstimate / 1000;
+        const altitudeClass = getAltitudeClass(altitudeKm);
+        return altitudeClass === altitudeFilter;
+      },
+    );
   }, [trackedSatellites, altitudeFilter]);
 
   // Search results
@@ -99,6 +129,13 @@ const World: React.FC = () => {
       )
       .slice(0, SEARCH_RESULT_LIMIT);
   }, [filteredSatellites, searchQuery]);
+
+  // Favorites list
+  const favoriteSatellites = useMemo(() => {
+    return trackedSatellites.filter((sat: { noradId: number }) =>
+      favorites.includes(sat.noradId),
+    );
+  }, [trackedSatellites, favorites]);
 
   // Catalog entries
   const catalogEntries = useMemo(
@@ -125,6 +162,21 @@ const World: React.FC = () => {
     setShowOrbit(true);
   };
 
+  // Get point color considering both selection and tracking
+  const getPointColor = (position: SatellitePosition): string => {
+    if (trackedNoradIds.includes(position.noradId)) {
+      return getTrackedColor(position.noradId);
+    }
+    return position.color;
+  };
+
+  // Get point radius considering selection and tracking
+  const getPointRadius = (position: SatellitePosition): number => {
+    if (position.noradId === selectedNoradId) return 0.12;
+    if (trackedNoradIds.includes(position.noradId)) return 0.08;
+    return 0.045;
+  };
+
   return (
     <div className="h-full w-full">
       <Globe
@@ -143,10 +195,8 @@ const World: React.FC = () => {
         pointLat="lat"
         pointLng="lng"
         pointAltitude={() => MARKER_ALTITUDE}
-        pointColor={(obj: object) => (obj as SatellitePosition).color}
-        pointRadius={(obj: object) =>
-          (obj as SatellitePosition).noradId === selectedNoradId ? 0.12 : 0.045
-        }
+        pointColor={(obj: object) => getPointColor(obj as SatellitePosition)}
+        pointRadius={(obj: object) => getPointRadius(obj as SatellitePosition)}
         pointsMerge
         pointsTransitionDuration={0}
         pathsData={
@@ -165,7 +215,7 @@ const World: React.FC = () => {
         pathTransitionDuration={0}
       />
 
-      {!showControls && (
+      {!showControls && !showFavorites && !showTimeLapseControls && (
         <section className="absolute bottom-4 left-4 right-4 z-20 rounded-2xl border border-white/15 bg-slate-950/80 p-4 text-left text-white shadow-2xl backdrop-blur-md sm:right-auto sm:w-96">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -183,6 +233,11 @@ const World: React.FC = () => {
             >
               Open panel
             </button>
+            {isTimeLapseActive && (
+              <span className="shrink-0 rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-bold text-cyan-300">
+                Time Lapse: {getTimeOffsetDisplay()}
+              </span>
+            )}
           </div>
           <p className="mt-2 line-clamp-2 text-sm text-slate-400">
             {statusMessage}
@@ -192,6 +247,22 @@ const World: React.FC = () => {
               Last updated: {new Date(lastUpdated).toLocaleString()}
             </p>
           )}
+          <div className="mt-3 flex gap-2">
+            <button
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+              onClick={() => setShowFavorites(true)}
+              type="button"
+            >
+              Favorites ({favorites.length})
+            </button>
+            <button
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+              onClick={() => setShowTimeLapseControls(true)}
+              type="button"
+            >
+              Time Lapse
+            </button>
+          </div>
         </section>
       )}
 
@@ -257,7 +328,15 @@ const World: React.FC = () => {
                   onClick={() => handleSelectSatellite(item.noradId)}
                   type="button"
                 >
-                  <span className="truncate font-medium">{item.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium">{item.name}</span>
+                    {isFavorite(item.noradId) && (
+                      <span className="text-yellow-400">★</span>
+                    )}
+                    {isTracked(item.noradId) && (
+                      <span className="text-blue-400">📍</span>
+                    )}
+                  </div>
                   <span className="ml-2 shrink-0 text-xs text-slate-400">
                     {item.noradId}
                   </span>
@@ -316,6 +395,24 @@ const World: React.FC = () => {
             </ControlButton>
             <ControlButton onClick={locateUser}>Locate me</ControlButton>
             <ControlButton onClick={refreshCatalog}>Refresh</ControlButton>
+            {selectedPosition && (
+              <ControlButton
+                onClick={() => toggleFavorite(selectedPosition.noradId)}
+              >
+                {isFavorite(selectedPosition.noradId)
+                  ? "★ Favorited"
+                  : "☆ Favorite"}
+              </ControlButton>
+            )}
+            {selectedPosition && (
+              <ControlButton
+                onClick={() => toggleTracked(selectedPosition.noradId)}
+              >
+                {isTracked(selectedPosition.noradId)
+                  ? "📍 Tracked"
+                  : "📍 Track"}
+              </ControlButton>
+            )}
             {userLocation && (
               <ControlButton onClick={clearUserLocation}>
                 Clear location
@@ -327,7 +424,202 @@ const World: React.FC = () => {
               Fetching one bulk catalog from CelesTrak\u2026
             </p>
           )}
+          {lastUpdated && (
+            <p className="mt-1 text-xs text-slate-500">
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </p>
+          )}
+          {trackedNoradIds.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs text-slate-400 mb-2">
+                Tracking {trackedNoradIds.length} satellites
+              </p>
+              <button
+                className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+                onClick={clearTracked}
+                type="button"
+              >
+                Clear all tracked
+              </button>
+            </div>
+          )}
         </aside>
+      )}
+
+      {/* Favorites Panel */}
+      {showFavorites && (
+        <div
+          aria-modal="true"
+          className="absolute inset-0 z-40 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+          role="dialog"
+        >
+          <section className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 p-4 sm:p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+                  Favorites
+                </p>
+                <h2 className="mt-1 text-2xl font-bold">
+                  {favorites.length} Favorite Satellites
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Quick access to your favorite satellites.
+                </p>
+              </div>
+              <button
+                aria-label="Close favorites"
+                className="rounded-full bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+                onClick={() => setShowFavorites(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </header>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4">
+              {favoriteSatellites.length > 0 ? (
+                favoriteSatellites.map(
+                  (item: { noradId: number; name: string }) => (
+                    <button
+                      className={`flex items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
+                        item.noradId === selectedNoradId
+                          ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
+                          : "border-white/10 bg-white/5 hover:bg-white/10"
+                      }`}
+                      key={item.noradId}
+                      onClick={() => {
+                        handleSelectSatellite(item.noradId);
+                        setShowFavorites(false);
+                      }}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {item.name}
+                        </span>
+                        {isTracked(item.noradId) && (
+                          <span className="text-blue-400">📍</span>
+                        )}
+                      </div>
+                      <span className="ml-3 shrink-0 text-xs text-slate-400">
+                        {item.noradId}
+                      </span>
+                    </button>
+                  ),
+                )
+              ) : (
+                <p className="p-4 text-center text-slate-400">
+                  No favorites yet. Add satellites to favorites from the control
+                  panel.
+                </p>
+              )}
+            </div>
+
+            {favorites.length > 0 && (
+              <footer className="flex justify-end gap-3 border-t border-white/10 p-4">
+                <button
+                  className="rounded-full bg-red-500/20 px-4 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/30"
+                  onClick={clearFavorites}
+                  type="button"
+                >
+                  Clear all favorites
+                </button>
+              </footer>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* Time Lapse Controls */}
+      {showTimeLapseControls && (
+        <div
+          aria-modal="true"
+          className="absolute bottom-4 right-4 z-50 w-full max-w-md p-3 sm:p-4"
+          role="dialog"
+        >
+          <section className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 p-4 sm:p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+                  Time Lapse
+                </p>
+                <h2 className="mt-1 text-2xl font-bold">Time Lapse Controls</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Watch satellite movement at accelerated speeds.
+                </p>
+              </div>
+              <button
+                aria-label="Close time lapse controls"
+                className="rounded-full bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+                onClick={() => setShowTimeLapseControls(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </header>
+
+            <div className="flex-1 p-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-300">Status</span>
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm ${
+                      isTimeLapseActive
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-red-500/20 text-red-400"
+                    }`}
+                  >
+                    {isTimeLapseActive ? "Active" : "Stopped"}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-slate-300 mb-2">
+                    Speed
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {speeds.map((s) => (
+                      <button
+                        key={s}
+                        className={`rounded-lg border px-3 py-2 text-sm transition ${
+                          speed === s
+                            ? "border-cyan-400 bg-cyan-400/20 text-cyan-300"
+                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                        }`}
+                        onClick={() => setTimeLapseSpeed(s)}
+                        type="button"
+                      >
+                        {getSpeedLabel(s)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 rounded-full bg-cyan-500/20 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-500/30"
+                    onClick={toggleTimeLapse}
+                    type="button"
+                  >
+                    {isTimeLapseActive ? "Stop" : "Start"} Time Lapse
+                  </button>
+                  <button
+                    className="flex-1 rounded-full bg-white/10 px-4 py-2 text-sm font-bold transition hover:bg-white/20"
+                    onClick={resetTime}
+                    type="button"
+                  >
+                    Reset to Now
+                  </button>
+                </div>
+                <div className="mt-4 text-center">
+                  <span className="text-sm text-slate-400">
+                    Time: {getTimeOffsetDisplay()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       )}
 
       {showCatalog && (
@@ -375,7 +667,15 @@ const World: React.FC = () => {
                     }}
                     type="button"
                   >
-                    <span className="truncate font-medium">{item.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{item.name}</span>
+                      {isFavorite(item.noradId) && (
+                        <span className="text-yellow-400">★</span>
+                      )}
+                      {isTracked(item.noradId) && (
+                        <span className="text-blue-400">📍</span>
+                      )}
+                    </div>
                     <span className="ml-3 shrink-0 text-xs text-slate-400">
                       {item.noradId}
                     </span>

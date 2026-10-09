@@ -43,7 +43,6 @@ const World: React.FC = () => {
     setShowOrbit,
     followSelected,
     setFollowSelected,
-    MARKER_ALTITUDE,
   } = useSatellitePositions(trackedSatellites, selectedNoradId);
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
@@ -237,11 +236,15 @@ const World: React.FC = () => {
         pointsData={satellitePositions}
         pointLat="lat"
         pointLng="lng"
-        pointAltitude={() => MARKER_ALTITUDE}
+        pointAltitude="alt"
         pointColor={(obj: object) => getPointColor(obj as SatellitePosition)}
         pointRadius={(obj: object) => getPointRadius(obj as SatellitePosition)}
         pointsMerge
         pointsTransitionDuration={0}
+        onPointClick={(obj: object) => {
+          const position = obj as SatellitePosition;
+          selectSatellite(position.noradId);
+        }}
         pathsData={
           orbitPoints.length > 0
             ? [{ points: orbitPoints, color: selectedPosition?.color }]

@@ -255,6 +255,7 @@ export const ALTITUDE_FILTERS = {
   leo: { label: "LEO (< 2000 km)", value: "leo" },
   meo: { label: "MEO (2-20k km)", value: "meo" },
   geo: { label: "GEO (20k+ km)", value: "geo" },
+  none: { label: "None", value: "none" },
 } as const;
 
 export type AltitudeFilter = keyof typeof ALTITUDE_FILTERS;

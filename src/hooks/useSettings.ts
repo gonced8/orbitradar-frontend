@@ -35,7 +35,7 @@ export const useSettings = () => {
           theme: ["dark", "light", "system"].includes(parsed.theme ?? "")
             ? parsed.theme!
             : DEFAULT_SETTINGS.theme,
-          defaultAltitudeFilter: ["all", "leo", "meo", "geo"].includes(
+          defaultAltitudeFilter: ["all", "leo", "meo", "geo", "none"].includes(
             parsed.defaultAltitudeFilter ?? "",
           )
             ? parsed.defaultAltitudeFilter!

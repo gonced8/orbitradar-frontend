@@ -207,6 +207,7 @@ const World: React.FC = () => {
 
   // Filter satellites by altitude
   const filteredSatellites = useMemo(() => {
+    if (altitudeFilter === "none") return [];
     if (altitudeFilter === "all") return trackedSatellites;
     return trackedSatellites.filter(
       (sat: { noradId: number; name: string; periodSeconds: number }) => {
@@ -216,6 +217,21 @@ const World: React.FC = () => {
       },
     );
   }, [trackedSatellites, altitudeFilter]);
+
+  useEffect(() => {
+    if (altitudeFilter !== "none") return;
+    selectSatellite(null);
+    setFollowSelected(false);
+    setShowOrbit(false);
+    clearPasses();
+    setShowPassPrediction(false);
+  }, [
+    altitudeFilter,
+    clearPasses,
+    selectSatellite,
+    setFollowSelected,
+    setShowOrbit,
+  ]);
 
   // Search results
   const searchResults = useMemo(() => {
@@ -388,7 +404,7 @@ const World: React.FC = () => {
                   labelSize={1}
                   labelDotRadius={0.5}
                   pathsData={
-                    orbitPoints.length > 0
+                    altitudeFilter !== "none" && orbitPoints.length > 0
                       ? [
                           {
                             points: orbitPoints,

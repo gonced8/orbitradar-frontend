@@ -6,6 +6,7 @@ import {
   getAltitudeClass,
   estimateAltitudeFromPeriod,
   ALTITUDE_COLORS,
+  ALTITUDE_FILTERS,
 } from "../../utils/satellite";
 
 // Sample TLE data for testing
@@ -86,6 +87,13 @@ describe("satellite utils", () => {
     it("classifies GEO correctly", () => {
       expect(getAltitudeClass(20000)).toBe("geo");
       expect(getAltitudeClass(36000)).toBe("geo");
+    });
+  });
+
+  it("provides an Earth-only altitude filter", () => {
+    expect(ALTITUDE_FILTERS.none).toEqual({
+      label: "None",
+      value: "none",
     });
   });
 

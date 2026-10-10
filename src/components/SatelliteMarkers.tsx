@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { SatellitePosition } from "../utils/satellite";
-import { getSatelliteMarkerScale } from "../utils/satelliteMarkerScale";
+import {
+  getSatelliteMarkerScale,
+  SELECTED_SATELLITE_COLOR,
+} from "../utils/satelliteMarkerScale";
 
 type Props = {
   globe: GlobeMethods | null;
@@ -25,19 +28,25 @@ const SatelliteMarkers = ({
   const capacityRef = useRef(1024);
   const [markerCapacity, setMarkerCapacity] = useState(1024);
   const latestRef = useRef({ positions, onSelect });
+  const trackedIds = useMemo(() => new Set(trackedNoradIds), [trackedNoradIds]);
   latestRef.current = { positions, onSelect };
 
   useEffect(() => {
     if (!globe) return;
     capacityRef.current = markerCapacity;
     const mesh = new THREE.InstancedMesh(
-      new THREE.SphereGeometry(1, 6, 4),
-      new THREE.MeshBasicMaterial({ vertexColors: true }),
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        toneMapped: false,
+        vertexColors: true,
+      }),
       markerCapacity,
     );
     mesh.name = "orbitradar-satellite-markers";
     mesh.frustumCulled = false;
     mesh.count = 0;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     globe.scene().add(mesh);
     meshRef.current = mesh;
 
@@ -121,7 +130,7 @@ const SatelliteMarkers = ({
         getSatelliteMarkerScale(
           globe.getGlobeRadius(),
           position.noradId === selectedNoradId,
-          trackedNoradIds.includes(position.noradId),
+          trackedIds.has(position.noradId),
         ),
       );
       transform.updateMatrix();
@@ -129,16 +138,25 @@ const SatelliteMarkers = ({
       mesh.setColorAt(
         index,
         color.set(
-          trackedNoradIds.includes(position.noradId)
-            ? getTrackedColor(position.noradId)
-            : position.color,
+          position.noradId === selectedNoradId
+            ? SELECTED_SATELLITE_COLOR
+            : trackedIds.has(position.noradId)
+              ? getTrackedColor(position.noradId)
+              : position.color,
         ),
       );
     });
     mesh.count = positions.length;
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [globe, positions, selectedNoradId, trackedNoradIds, getTrackedColor]);
+  }, [
+    globe,
+    positions,
+    selectedNoradId,
+    trackedIds,
+    getTrackedColor,
+    markerCapacity,
+  ]);
 
   return null;
 };

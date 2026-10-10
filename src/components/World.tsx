@@ -391,9 +391,9 @@ const World: React.FC = () => {
                   pathPointLng="lng"
                   pathPointAlt="alt"
                   pathColor={(path: object) =>
-                    `${(path as { color?: string }).color ?? "#67e8f9"}cc`
+                    `${(path as { color?: string }).color ?? "#67e8f9"}e6`
                   }
-                  pathStroke={0.5}
+                  pathStroke={0.9}
                   pathTransitionDuration={0}
                 />
               )}

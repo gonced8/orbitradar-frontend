@@ -20,6 +20,7 @@ const cloudImageUrl = () => {
 // equirectangular textures and lighting to line up with the Earth image.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
 const CLOUD_RADIUS_SCALE = 1.008;
+const CLOUD_OPACITY = 0.58;
 const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
@@ -218,7 +219,7 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
               cloudMap: { value: texture },
               sunDirection: uniforms.sunDirection,
               nightEnabled: uniforms.enabled,
-              opacity: { value: 0.72 },
+              opacity: { value: CLOUD_OPACITY },
             },
             transparent: true,
             depthTest: true,
@@ -244,7 +245,8 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
                 vec4 cloud = texture2D(cloudMap, vUv);
                 float daylight = dot(normalize(vNormal), normalize(sunDirection));
                 float day = mix(1.0, smoothstep(-0.22, 0.12, daylight), nightEnabled);
-                vec3 cloudColor = mix(vec3(0.22, 0.28, 0.45), vec3(1.0), day);
+                vec3 nightCloudColor = vec3(0.055, 0.075, 0.14);
+                vec3 cloudColor = mix(nightCloudColor, vec3(1.0), day);
                 gl_FragColor = vec4(cloudColor, cloud.a * opacity);
               }
             `,

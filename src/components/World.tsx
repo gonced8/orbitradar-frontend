@@ -427,6 +427,7 @@ const World: React.FC = () => {
                 <EarthOverlays
                   globe={globeEl.current ?? null}
                   time={timeLapse.currentTime}
+                  getTime={timeLapse.getEffectiveTime}
                   nightEnabled={settings.nightShading ?? true}
                   cloudsEnabled={settings.cloudCover ?? true}
                 />

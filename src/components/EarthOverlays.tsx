@@ -6,6 +6,7 @@ import { getSunDirection } from "../utils/solar";
 type Props = {
   globe: GlobeMethods | null;
   time: Date;
+  getTime?: () => Date;
   nightEnabled: boolean;
   cloudsEnabled: boolean;
 };
@@ -19,7 +20,7 @@ const cloudImageUrl = () => {
 // its coordinate system. Keep the same rotation when transforming the sun
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_OPACITY = 0.5;
+const CLOUD_OPACITY = 0.35;
 const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
@@ -29,6 +30,7 @@ const toOverlayDirection = (direction: THREE.Vector3) =>
 export const EarthOverlays = ({
   globe,
   time,
+  getTime,
   nightEnabled,
   cloudsEnabled,
 }: Props) => {
@@ -61,8 +63,12 @@ export const EarthOverlays = ({
     return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cloudVersion)}`;
   }, [cloudVersion]);
   const sunRef = useRef(sun);
+  const timeRef = useRef(time);
+  const getTimeRef = useRef(getTime);
   const nightEnabledRef = useRef(nightEnabled);
   sunRef.current = sun;
+  timeRef.current = time;
+  getTimeRef.current = getTime;
   nightEnabledRef.current = nightEnabled;
 
   useEffect(() => {
@@ -181,6 +187,22 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
     uniforms.enabled.value = nightEnabled ? 1 : 0;
     uniforms.sunDirection.value.copy(toOverlayDirection(sun));
   }, [nightEnabled, sun]);
+
+  useEffect(() => {
+    if (!getTime || typeof window.requestAnimationFrame !== "function") return;
+    let frame = 0;
+    const updateSun = () => {
+      const simulatedTime = getTimeRef.current?.() ?? timeRef.current;
+      const direction = getSunDirection(simulatedTime);
+      nightUniformsRef.current.enabled.value = nightEnabledRef.current ? 1 : 0;
+      nightUniformsRef.current.sunDirection.value.copy(
+        toOverlayDirection(direction),
+      );
+      frame = window.requestAnimationFrame(updateSun);
+    };
+    frame = window.requestAnimationFrame(updateSun);
+    return () => window.cancelAnimationFrame(frame);
+  }, [getTime]);
 
   useEffect(() => {
     const clearCloudTexture = () => {

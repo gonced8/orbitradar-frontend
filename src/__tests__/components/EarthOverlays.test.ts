@@ -29,12 +29,24 @@ describe("Earth solar geometry", () => {
     );
 
     expect(scene.getObjectByName("orbitradar-night-side")).toBeUndefined();
+    expect(scene.getObjectByName("orbitradar-cloud-cover")).toBeUndefined();
     expect(material.customProgramCacheKey()).toContain(
-      "orbitradar-night-surface",
+      "orbitradar-cloud-surface",
     );
+    const shader = {
+      uniforms: {},
+      vertexShader: "#include <common>\n#include <beginnormal_vertex>",
+      fragmentShader: "#include <common>\n#include <opaque_fragment>",
+    } as unknown as Parameters<THREE.MeshPhongMaterial["onBeforeCompile"]>[0];
+    material.onBeforeCompile(
+      shader,
+      undefined as unknown as THREE.WebGLRenderer,
+    );
+    expect(shader.uniforms).toHaveProperty("orbitradarCloudMap");
+    expect(shader.fragmentShader).toContain("orbitradarCloudSample");
     view.unmount();
     expect(material.customProgramCacheKey()).not.toContain(
-      "orbitradar-night-surface",
+      "orbitradar-cloud-surface",
     );
   });
 

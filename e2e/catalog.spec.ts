@@ -22,9 +22,12 @@ test("loads the shared OMM snapshot and searches a six-digit catalog ID", async 
 }) => {
   await page.goto("/");
   await expect(page.getByText("3 satellites", { exact: true })).toBeVisible();
-  await page
-    .getByRole("searchbox", { name: /find by name or norad id/i })
-    .fill("100972");
+  const search = page.getByRole("searchbox", {
+    name: /find by name or norad id/i,
+  });
+  if (!(await search.isVisible()))
+    await page.getByRole("button", { name: "Open panel" }).click();
+  await search.fill("100972");
   await expect(
     page.getByRole("button", { name: /modern id test satellite.*100972/i }),
   ).toBeVisible();
@@ -39,6 +42,11 @@ test("sizes the globe canvas to its responsive container", async ({
   isMobile,
 }) => {
   await page.goto("/");
+  const supportsWebGl = await page.evaluate(() => {
+    const probe = document.createElement("canvas");
+    return Boolean(probe.getContext("webgl2") ?? probe.getContext("webgl"));
+  });
+  test.skip(!supportsWebGl, "Browser runtime does not provide WebGL");
   const canvas = page.locator("canvas").first();
   await expect(canvas).toBeVisible({ timeout: 20_000 });
   const dimensions = await canvas.evaluate((element) => {
@@ -65,9 +73,31 @@ test("can open the time-lapse dialog with fixture catalog data", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Close control panel" }).click();
+  const closePanel = page.getByRole("button", { name: "Close control panel" });
+  if (await closePanel.isVisible()) await closePanel.click();
   await page.getByRole("button", { name: "Time Lapse" }).first().click();
   await expect(
     page.getByRole("dialog", { name: "Time Lapse Controls" }),
   ).toBeVisible();
+});
+
+test("keeps the mobile globe unobstructed until the panel is opened", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Mobile layout only");
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Open panel" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Close control panel" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "Open panel" }).click();
+  const panel = page.getByRole("complementary");
+  await expect(panel).toBeVisible();
+  const height = await panel.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  expect(height).toBeLessThanOrEqual(
+    (await page.viewportSize())!.height * 0.43,
+  );
 });

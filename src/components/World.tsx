@@ -27,6 +27,7 @@ import {
 } from "../utils/satellite";
 import PassPredictionPanel from "./PassPredictionPanel";
 import SettingsPanel from "./SettingsPanel";
+import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -73,6 +74,19 @@ const World: React.FC = () => {
     canvas.addEventListener("webglcontextlost", handleContextLost);
     return () =>
       canvas.removeEventListener("webglcontextlost", handleContextLost);
+  }, [globeReady, globeRetryKey]);
+
+  useEffect(() => {
+    const globe = globeEl.current;
+    if (!globeReady || !globe) return;
+    const syncAnimation = () => {
+      if (document.hidden) globe.pauseAnimation();
+      else globe.resumeAnimation();
+    };
+    syncAnimation();
+    document.addEventListener("visibilitychange", syncAnimation);
+    return () =>
+      document.removeEventListener("visibilitychange", syncAnimation);
   }, [globeReady, globeRetryKey]);
 
   // Custom hooks
@@ -136,7 +150,11 @@ const World: React.FC = () => {
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(() =>
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(min-width: 640px)").matches
+      : true,
+  );
   const [explorerTab, setExplorerTab] = useState<
     "catalog" | "favorites" | "tracked"
   >("catalog");
@@ -334,9 +352,20 @@ const World: React.FC = () => {
                   width={globeSize.width}
                   height={globeSize.height}
                   onGlobeReady={() => {
+                    const globe = globeEl.current;
+                    if (!globe) return;
+                    globe
+                      .renderer()
+                      .setPixelRatio(
+                        getGlobePixelRatio(window.devicePixelRatio),
+                      );
+                    const controls = globe.controls();
+                    controls.enableDamping = true;
+                    controls.dampingFactor = 0.08;
                     setGlobeReady(true);
-                    globeEl.current?.pointOfView({ altitude: 3.2 });
+                    globe.pointOfView({ altitude: 3.2 });
                   }}
+                  enablePointerInteraction={false}
                   globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
                   backgroundColor="black"
                   showAtmosphere
@@ -391,7 +420,7 @@ const World: React.FC = () => {
         !showTimeLapseControls &&
         !showPassPrediction &&
         !showSettings && (
-          <section className="absolute bottom-[53vh] left-3 right-3 z-20 rounded-2xl border border-white/15 bg-slate-950/90 p-4 text-left text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-[23rem] sm:right-auto sm:w-96">
+          <section className="absolute bottom-3 left-3 right-3 z-20 rounded-2xl border border-white/15 bg-slate-950/90 p-4 text-left text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-[23rem] sm:right-auto sm:w-96">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
@@ -403,21 +432,22 @@ const World: React.FC = () => {
               </div>
               <button
                 className="shrink-0 rounded-full bg-white/10 px-4 py-2 text-sm font-bold transition hover:bg-white/20"
+                aria-expanded={showControls}
                 onClick={() => setShowControls(true)}
                 type="button"
               >
                 Open panel
               </button>
             </div>
-            <p className="mt-2 line-clamp-2 text-sm text-slate-400">
+            <p className="mt-2 hidden line-clamp-2 text-sm text-slate-400 sm:block">
               {statusMessage}
             </p>
             {lastUpdated && (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 hidden text-xs text-slate-500 sm:block">
                 Last updated: {new Date(lastUpdated).toLocaleString()}
               </p>
             )}
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 hidden text-xs text-slate-500 sm:block">
               Orbital data:{" "}
               <a
                 className="underline"
@@ -428,16 +458,16 @@ const World: React.FC = () => {
                 CelesTrak
               </a>
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
               <button
-                className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+                className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
                 onClick={() => setShowFavorites(true)}
                 type="button"
               >
                 Favorites ({favorites.length})
               </button>
               <button
-                className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+                className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
                 onClick={() => setShowTimeLapseControls(true)}
                 type="button"
               >
@@ -445,7 +475,7 @@ const World: React.FC = () => {
               </button>
               {userLocation && selectedPosition && (
                 <button
-                  className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+                  className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
                   onClick={handleCalculatePasses}
                   type="button"
                 >
@@ -453,7 +483,7 @@ const World: React.FC = () => {
                 </button>
               )}
               <button
-                className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
+                className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-bold transition hover:bg-white/20"
                 onClick={() => setShowSettings(true)}
                 type="button"
               >
@@ -465,7 +495,11 @@ const World: React.FC = () => {
 
       {/* Control Panel */}
       {showControls && (
-        <aside className="absolute bottom-0 left-0 right-0 z-30 h-[52vh] max-h-[52vh] overflow-y-auto rounded-t-2xl border border-white/15 bg-slate-950/95 p-4 pb-8 text-left text-white shadow-2xl backdrop-blur-xl sm:relative sm:h-full sm:max-h-full sm:w-[22.5rem] sm:shrink-0 sm:rounded-none sm:border-b-0 sm:border-l-0 sm:border-t-0 sm:border-r sm:pb-4">
+        <aside className="absolute bottom-0 left-0 right-0 z-30 h-[42dvh] max-h-[28rem] overflow-y-auto rounded-t-2xl border border-white/15 bg-slate-950/95 p-4 pb-8 text-left text-white shadow-2xl backdrop-blur-xl sm:relative sm:h-full sm:max-h-full sm:w-[22.5rem] sm:shrink-0 sm:rounded-none sm:border-b-0 sm:border-l-0 sm:border-t-0 sm:border-r sm:pb-4">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/25 sm:hidden"
+          />
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">

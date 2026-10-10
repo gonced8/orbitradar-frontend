@@ -96,7 +96,8 @@ export const useTimeLapse = () => {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
+    const tick = () => {
+      if (document.hidden) return;
       const now = Date.now();
       setLiveTimeMs(now);
       if (isTimeLapseActive) {
@@ -105,8 +106,13 @@ export const useTimeLapse = () => {
         setSimulationTimeMs((current) => current + elapsed * speed);
         setUpdatedAt(now);
       }
-    }, 1000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [isTimeLapseActive, speed]);
 
   const getSpeedLabel = useCallback((value: TimeLapseSpeed): string => {

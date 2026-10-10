@@ -23,6 +23,7 @@ export const useSatellitePositions = (
   const [followSelected, setFollowSelected] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+  const usesExternalTime = externalTime !== undefined;
   const effectiveTime = externalTime ?? liveTime;
   const catalogTles = useMemo(() => trackedSatellites, [trackedSatellites]);
   const latestRef = useRef({
@@ -39,12 +40,17 @@ export const useSatellitePositions = (
   };
 
   useEffect(() => {
-    const timer = window.setInterval(
-      () => setLiveTime(new Date()),
-      POSITION_TICK_MS,
-    );
-    return () => window.clearInterval(timer);
-  }, []);
+    if (usesExternalTime) return;
+    const tick = () => {
+      if (document.visibilityState !== "hidden") setLiveTime(new Date());
+    };
+    const timer = window.setInterval(tick, POSITION_TICK_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [usesExternalTime]);
 
   useEffect(() => {
     let worker: Worker;

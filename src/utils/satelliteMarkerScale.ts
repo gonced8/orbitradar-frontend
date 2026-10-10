@@ -3,4 +3,9 @@ export const getSatelliteMarkerScale = (
   globeRadius: number,
   selected: boolean,
   tracked: boolean,
-): number => globeRadius * (selected ? 0.008 : tracked ? 0.0055 : 0.0035);
+): number => globeRadius * (selected ? 0.012 : tracked ? 0.008 : 0.005);
+
+export const SELECTED_SATELLITE_COLOR = "#ffffff";
+
+export const getGlobePixelRatio = (devicePixelRatio: number): number =>
+  Math.min(Math.max(devicePixelRatio, 1), 1.5);

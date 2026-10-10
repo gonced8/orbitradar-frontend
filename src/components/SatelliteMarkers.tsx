@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { SatellitePosition } from "../utils/satellite";
-import { useState } from "react";
+import { getSatelliteMarkerScale } from "../utils/satelliteMarkerScale";
 
 type Props = {
   globe: GlobeMethods | null;
@@ -118,11 +118,11 @@ const SatelliteMarkers = ({
       const coords = globe.getCoords(position.lat, position.lng, position.alt);
       transform.position.set(coords.x, coords.y, coords.z);
       transform.scale.setScalar(
-        position.noradId === selectedNoradId
-          ? 0.016
-          : trackedNoradIds.includes(position.noradId)
-            ? 0.014
-            : Math.max(0.011, position.alt * 0.001),
+        getSatelliteMarkerScale(
+          globe.getGlobeRadius(),
+          position.noradId === selectedNoradId,
+          trackedNoradIds.includes(position.noradId),
+        ),
       );
       transform.updateMatrix();
       mesh.setMatrixAt(index, transform.matrix);

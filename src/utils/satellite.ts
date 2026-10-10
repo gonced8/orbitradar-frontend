@@ -152,9 +152,11 @@ const FEATURED_COLORS = new Map<number, string>([
 
 // Altitude-based colors
 export const ALTITUDE_COLORS = {
-  leo: "#c084fc", // < 2000 km (Violet)
-  meo: "#ffd166", // < 20000 km (Gold)
-  geo: "#ff4fdb", // >= 20000 km (Magenta)
+  // High-luminance, colour-blind-friendly accents that stay distinct over
+  // oceans, land, clouds, and the dark background.
+  leo: "#d7ff3f", // < 2000 km (Chartreuse)
+  meo: "#ffc857", // < 20000 km (Amber)
+  geo: "#ff70c8", // >= 20000 km (Pink)
 } as const;
 
 export const getSatelliteColor = (

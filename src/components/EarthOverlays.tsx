@@ -22,6 +22,7 @@ const cloudImageUrl = (time: Date) => {
 // its coordinate system. Overlay spheres must use the same rotation for their
 // equirectangular textures and lighting to line up with the Earth image.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
+const OVERLAY_RADIUS_SCALE = 1.00025;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()
@@ -46,7 +47,11 @@ export const EarthOverlays = ({
   useEffect(() => {
     if (!globe) return;
     const radius = globe.getGlobeRadius();
-    const geometry = new THREE.SphereGeometry(radius * 1.002, 64, 32);
+    const geometry = new THREE.SphereGeometry(
+      radius * OVERLAY_RADIUS_SCALE,
+      64,
+      32,
+    );
     const material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -55,7 +60,7 @@ export const EarthOverlays = ({
         opacity: { value: 0.72 },
       },
       side: THREE.FrontSide,
-      depthTest: false,
+      depthTest: true,
       vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `uniform vec3 sunDirection; uniform float opacity; varying vec3 vNormal; void main() { float daylight = dot(normalize(vNormal), normalize(sunDirection)); float day = smoothstep(-0.22, 0.12, daylight); float night = 1.0 - day; gl_FragColor = vec4(0.005, 0.012, 0.04, night * opacity); }`,
     });
@@ -110,13 +115,17 @@ export const EarthOverlays = ({
         texture.generateMipmaps = false;
         texture.needsUpdate = true;
         const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(globe.getGlobeRadius() * 1.008, 64, 32),
+          new THREE.SphereGeometry(
+            globe.getGlobeRadius() * OVERLAY_RADIUS_SCALE,
+            64,
+            32,
+          ),
           new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
             opacity: 0.58,
             alphaTest: 0.05,
-            depthTest: false,
+            depthTest: true,
             depthWrite: false,
             side: THREE.FrontSide,
           }),

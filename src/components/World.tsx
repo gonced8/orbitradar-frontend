@@ -423,29 +423,34 @@ const World: React.FC = () => {
         )}
       </div>
 
-      <div className="pointer-events-none absolute right-3 top-20 z-20 rounded-xl border border-white/15 bg-slate-950/75 px-3 py-2 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
-          {isPaused
-            ? "Paused UTC"
-            : isTimeLapseActive
-              ? "Simulation UTC"
-              : "Live UTC"}
-        </p>
-        <time
-          className="text-sm font-semibold tabular-nums"
-          dateTime={timeLapse.currentTime.toISOString()}
-        >
-          {timeLapse.currentTime.toLocaleString(undefined, {
-            timeZone: "UTC",
-            dateStyle: "short",
-            timeStyle: "medium",
-          })}
-        </time>
-        {settings.cloudCover && (
-          <p className="mt-0.5 text-[10px] text-slate-400">
-            Clouds: shared NASA daily fraction · latest cached observation
+      <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-lg border border-white/15 bg-slate-950/75 px-2.5 py-1.5 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
+        <div className="flex items-center gap-2">
+          <p className="hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:block">
+            {isPaused
+              ? "Paused UTC"
+              : isTimeLapseActive
+                ? "Simulation UTC"
+                : "Live UTC"}
           </p>
-        )}
+          <time
+            className="text-[11px] font-semibold tabular-nums sm:text-xs"
+            dateTime={timeLapse.currentTime.toISOString()}
+          >
+            <span className="sm:hidden">
+              {timeLapse.currentTime.toLocaleTimeString(undefined, {
+                timeZone: "UTC",
+                timeStyle: "medium",
+              })}
+            </span>
+            <span className="hidden sm:inline">
+              {timeLapse.currentTime.toLocaleString(undefined, {
+                timeZone: "UTC",
+                dateStyle: "short",
+                timeStyle: "medium",
+              })}
+            </span>
+          </time>
+        </div>
       </div>
 
       {/* Compact Info Panel (when controls closed) */}

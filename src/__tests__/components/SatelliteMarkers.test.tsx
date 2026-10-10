@@ -130,7 +130,7 @@ describe("SatelliteMarkers", () => {
       alt: 0.05,
       altitudeKm: 400,
       velocityKph: 27_000,
-      color: "#c084fc",
+      color: "#d7ff3f",
       altitudeClass: "leo",
     });
 

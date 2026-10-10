@@ -82,12 +82,12 @@ export const useMultipleTracking = (
         "#00f0ff",
         "#7cff4f",
         "#ffd400",
-        "#c084fc",
-        "#ff4fdb",
+        "#d7ff3f",
+        "#ff70c8",
         "#67e8f9",
         "#2cffb7",
         "#ff9f1c",
-        "#b967ff",
+        "#ffc857",
       ];
       return colors[index % colors.length];
     },

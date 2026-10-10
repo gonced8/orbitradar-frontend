@@ -34,8 +34,11 @@ import LocalClock from "./LocalClock";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
-const SELECTED_ORBIT_COLOR = "#ffd166f2";
-const SELECTED_ORBIT_STROKE = 1.35;
+// Keep this as a six-digit colour: react-globe.gl uses different colour
+// parsers for thin and fat paths, and eight-digit hex alpha is not handled
+// consistently by both paths.
+const SELECTED_ORBIT_COLOR = "#ffd166";
+const SELECTED_ORBIT_STROKE = 1.8;
 const Globe = lazy(() => import("react-globe.gl"));
 const SatelliteMarkers = lazy(() => import("./SatelliteMarkers"));
 

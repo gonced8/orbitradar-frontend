@@ -243,7 +243,7 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
               void main() {
                 vec4 cloud = texture2D(cloudMap, vUv);
                 float daylight = dot(normalize(vNormal), normalize(sunDirection));
-                float day = smoothstep(-0.22, 0.12, daylight);
+                float day = mix(1.0, smoothstep(-0.22, 0.12, daylight), nightEnabled);
                 vec3 cloudColor = mix(vec3(0.22, 0.28, 0.45), vec3(1.0), day);
                 gl_FragColor = vec4(cloudColor, cloud.a * opacity);
               }

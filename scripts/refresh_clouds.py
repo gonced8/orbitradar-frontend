@@ -142,8 +142,13 @@ def render_cloud_texture(values: np.ndarray, output_width: int = WIDTH, output_h
     return output.getvalue()
 
 
-def status_for_failure(previous: dict | None, now: datetime, message: str) -> dict:
-    previous_is_gfs = previous and previous.get("sourceId") == SOURCE_ID
+def status_for_failure(
+    previous: dict | None,
+    now: datetime,
+    message: str,
+    has_cached_image: bool,
+) -> dict:
+    previous_is_gfs = has_cached_image
     return {
         "schemaVersion": 2,
         "state": "stale" if previous_is_gfs else "error",
@@ -166,12 +171,14 @@ def refresh_cloud_image(site_dir: str = "site", now: datetime | None = None) -> 
     image_file = data_dir / "clouds" / "latest.png"
     status_file = data_dir / "cloud-status.json"
     previous = read_json(status_file)
-    if (
+    has_cached_image = bool(
         previous
         and previous.get("sourceId") == SOURCE_ID
         and previous.get("state") in {"ready", "stale"}
         and previous.get("fetchedAt")
-    ):
+        and image_file.is_file()
+    )
+    if has_cached_image:
         try:
             fetched_at = datetime.fromisoformat(previous["fetchedAt"].replace("Z", "+00:00"))
             if fetched_at + UPDATE_INTERVAL > now:
@@ -211,8 +218,14 @@ def refresh_cloud_image(site_dir: str = "site", now: datetime | None = None) -> 
         except Exception as error:  # noqa: BLE001 - continue to the previous cycle
             last_error = str(error)
 
-    atomic_write(status_file, json.dumps(status_for_failure(previous, now, last_error), indent=2) + "\n")
-    return {"queried": True, "state": "stale" if previous and previous.get("sourceId") == SOURCE_ID else "error"}
+    atomic_write(
+        status_file,
+        json.dumps(
+            status_for_failure(previous, now, last_error, has_cached_image), indent=2
+        )
+        + "\n",
+    )
+    return {"queried": True, "state": "stale" if has_cached_image else "error"}
 
 
 def main() -> None:

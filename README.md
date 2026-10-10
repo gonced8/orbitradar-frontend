@@ -6,7 +6,7 @@ Orbit Radar is a React + TypeScript satellite tracker built with Vite, Tailwind 
 
 - Live positions for the complete CelesTrak active-satellite catalog.
 - A shared OMM catalog snapshot, published centrally and cached locally for eight hours.
-- 3D globe with efficiently merged satellite markers and a selected-satellite orbital ground track.
+- 3D globe with efficiently merged satellite markers and a distinct gold selected-satellite orbital ground track.
 - Progressive orbit rendering when changing the selected satellite, with smooth GPU marker interpolation.
 - Search by satellite name or NORAD catalog ID.
 - Paginated catalog browser for selecting any loaded satellite without searching.

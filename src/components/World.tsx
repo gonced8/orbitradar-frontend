@@ -34,6 +34,8 @@ import LocalClock from "./LocalClock";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
+const SELECTED_ORBIT_COLOR = "#ffd166f2";
+const SELECTED_ORBIT_STROKE = 1.35;
 const Globe = lazy(() => import("react-globe.gl"));
 const SatelliteMarkers = lazy(() => import("./SatelliteMarkers"));
 
@@ -408,7 +410,6 @@ const World: React.FC = () => {
                       ? [
                           {
                             points: orbitPoints,
-                            color: selectedPosition?.color,
                           },
                         ]
                       : []
@@ -417,10 +418,8 @@ const World: React.FC = () => {
                   pathPointLat="lat"
                   pathPointLng="lng"
                   pathPointAlt="alt"
-                  pathColor={(path: object) =>
-                    `${(path as { color?: string }).color ?? "#67e8f9"}e6`
-                  }
-                  pathStroke={1.2}
+                  pathColor={SELECTED_ORBIT_COLOR}
+                  pathStroke={SELECTED_ORBIT_STROKE}
                   pathTransitionDuration={0}
                 />
               )}

@@ -86,6 +86,8 @@ const SatelliteMarkers = ({
 
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
+      transparent: true,
+      opacity: 1,
       toneMapped: false,
     });
     material.onBeforeCompile = (shader) => {
@@ -139,6 +141,9 @@ gl_Position = projectionMatrix * mvPosition;`,
     );
     mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
     mesh.name = "orbitradar-satellite-markers";
+    // Render after the transparent Earth overlays so their darkening never
+    // bleeds through the sides of a marker.
+    mesh.renderOrder = 10;
     mesh.frustumCulled = false;
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

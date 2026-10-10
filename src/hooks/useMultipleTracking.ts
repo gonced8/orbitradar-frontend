@@ -82,7 +82,7 @@ export const useMultipleTracking = (
         "#00f0ff",
         "#7cff4f",
         "#ffd400",
-        "#d7ff3f",
+        "#c084fc",
         "#ff70c8",
         "#67e8f9",
         "#2cffb7",

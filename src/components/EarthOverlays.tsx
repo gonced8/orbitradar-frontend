@@ -22,7 +22,8 @@ const cloudImageUrl = (time: Date) => {
 // its coordinate system. Overlay spheres must use the same rotation for their
 // equirectangular textures and lighting to line up with the Earth image.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const OVERLAY_RADIUS_SCALE = 1.00025;
+const NIGHT_RADIUS_SCALE = 1.002;
+const CLOUD_RADIUS_SCALE = 1.008;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()
@@ -48,7 +49,7 @@ export const EarthOverlays = ({
     if (!globe) return;
     const radius = globe.getGlobeRadius();
     const geometry = new THREE.SphereGeometry(
-      radius * OVERLAY_RADIUS_SCALE,
+      radius * NIGHT_RADIUS_SCALE,
       64,
       32,
     );
@@ -116,7 +117,7 @@ export const EarthOverlays = ({
         texture.needsUpdate = true;
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(
-            globe.getGlobeRadius() * OVERLAY_RADIUS_SCALE,
+            globe.getGlobeRadius() * CLOUD_RADIUS_SCALE,
             64,
             32,
           ),

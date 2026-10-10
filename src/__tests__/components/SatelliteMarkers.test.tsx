@@ -62,6 +62,10 @@ describe("SatelliteMarkers", () => {
     expect((currentMesh.material as THREE.MeshBasicMaterial).toneMapped).toBe(
       false,
     );
+    expect((currentMesh.material as THREE.MeshBasicMaterial).transparent).toBe(
+      true,
+    );
+    expect(currentMesh.renderOrder).toBe(10);
     expect((currentMesh.material as THREE.MeshBasicMaterial).vertexColors).toBe(
       false,
     );
@@ -130,7 +134,7 @@ describe("SatelliteMarkers", () => {
       alt: 0.05,
       altitudeKm: 400,
       velocityKph: 27_000,
-      color: "#d7ff3f",
+      color: "#c084fc",
       altitudeClass: "leo",
     });
 

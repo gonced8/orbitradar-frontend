@@ -18,6 +18,15 @@ const cloudImageUrl = (time: Date) => {
   return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_Cloud_Fraction_Day&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:4326&WIDTH=1024&HEIGHT=512&BBOX=-180,-90,180,90&TIME=${date}`;
 };
 
+// react-globe.gl rotates its textured globe to align the prime meridian with
+// its coordinate system. Overlay spheres must use the same rotation for their
+// equirectangular textures and lighting to line up with the Earth image.
+const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
+const toOverlayDirection = (direction: THREE.Vector3) =>
+  direction
+    .clone()
+    .applyAxisAngle(new THREE.Vector3(0, 1, 0), -GLOBE_TEXTURE_ROTATION_Y);
+
 export const EarthOverlays = ({
   globe,
   time,
@@ -42,7 +51,7 @@ export const EarthOverlays = ({
       transparent: true,
       depthWrite: false,
       uniforms: {
-        sunDirection: { value: sunRef.current.clone() },
+        sunDirection: { value: toOverlayDirection(sunRef.current) },
         opacity: { value: 0.72 },
       },
       side: THREE.FrontSide,
@@ -51,6 +60,7 @@ export const EarthOverlays = ({
       fragmentShader: `uniform vec3 sunDirection; uniform float opacity; varying vec3 vNormal; void main() { float daylight = dot(normalize(vNormal), normalize(sunDirection)); float day = smoothstep(-0.22, 0.12, daylight); float night = 1.0 - day; gl_FragColor = vec4(0.005, 0.012, 0.04, night * opacity); }`,
     });
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.y = GLOBE_TEXTURE_ROTATION_Y;
     mesh.name = "orbitradar-night-side";
     mesh.visible = nightEnabledRef.current;
     globe.scene().add(mesh);
@@ -68,7 +78,7 @@ export const EarthOverlays = ({
     if (!mesh) return;
     mesh.visible = nightEnabled;
     const material = mesh.material as THREE.ShaderMaterial;
-    material.uniforms.sunDirection.value.copy(sun);
+    material.uniforms.sunDirection.value.copy(toOverlayDirection(sun));
   }, [nightEnabled, sun]);
 
   useEffect(() => {
@@ -112,6 +122,7 @@ export const EarthOverlays = ({
           }),
         );
         mesh.name = "orbitradar-cloud-cover";
+        mesh.rotation.y = GLOBE_TEXTURE_ROTATION_Y;
         globe.scene().add(mesh);
         cloudRef.current = mesh;
       },

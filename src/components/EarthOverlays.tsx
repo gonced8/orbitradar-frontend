@@ -19,7 +19,7 @@ const cloudImageUrl = () => {
 // its coordinate system. Keep the same rotation when transforming the sun
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_OPACITY = 0.68;
+const CLOUD_OPACITY = 0.5;
 const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction

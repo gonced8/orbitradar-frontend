@@ -20,7 +20,7 @@ describe("SatelliteMarkers", () => {
       renderer: () => ({ domElement: canvas }),
       camera: () => new THREE.PerspectiveCamera(),
       getGlobeRadius: () => 100,
-      getCoords: () => ({ x: 101, y: 0, z: 0 }),
+      getCoords: (lat: number) => ({ x: 101, y: lat, z: 0 }),
     } as unknown as GlobeMethods;
     const positions: SatellitePosition[] = Array.from(
       { length: 1025 },
@@ -37,7 +37,7 @@ describe("SatelliteMarkers", () => {
       }),
     );
 
-    render(
+    const { rerender } = render(
       <SatelliteMarkers
         globe={globe}
         positions={positions}
@@ -58,8 +58,54 @@ describe("SatelliteMarkers", () => {
     expect((currentMesh.material as THREE.MeshBasicMaterial).toneMapped).toBe(
       false,
     );
+    expect(currentMesh.instanceColor).toBeInstanceOf(
+      THREE.InstancedBufferAttribute,
+    );
     const selectedColor = new THREE.Color();
     currentMesh.getColorAt(0, selectedColor);
     expect(selectedColor.getHex()).toBe(0xffffff);
+    const catalogColor = new THREE.Color();
+    currentMesh.getColorAt(1, catalogColor);
+    expect(catalogColor.getHex()).toBe(0x67e8f9);
+
+    const targetPositions = currentMesh.geometry.getAttribute(
+      "instanceTargetPosition",
+    );
+    expect(targetPositions).toBeInstanceOf(THREE.InstancedBufferAttribute);
+    expect(targetPositions.getX(0)).toBe(101);
+
+    const material = currentMesh.material as THREE.MeshBasicMaterial;
+    const shader = {
+      uniforms: {} as Record<string, THREE.IUniform>,
+      vertexShader: "#include <common>\n#include <project_vertex>",
+      fragmentShader: "",
+    };
+    material.onBeforeCompile(
+      shader as Parameters<NonNullable<typeof material.onBeforeCompile>>[0],
+      {} as THREE.WebGLRenderer,
+    );
+    expect(shader.uniforms.markerInterpolation).toBeDefined();
+    expect(shader.vertexShader).toContain("instanceTargetPosition");
+    expect(shader.vertexShader).toContain("markerDirection");
+
+    const movedPositions = positions.map((position, index) =>
+      index === 0 ? { ...position, lat: 10 } : position,
+    );
+    rerender(
+      <SatelliteMarkers
+        globe={globe}
+        positions={movedPositions}
+        selectedNoradId={1}
+        trackedNoradIds={[]}
+        getTrackedColor={() => "#fbbf24"}
+        onSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(targetPositions.getY(0)).toBe(10));
+    const startMatrix = new THREE.Matrix4();
+    const startPosition = new THREE.Vector3();
+    currentMesh.getMatrixAt(0, startMatrix);
+    startPosition.setFromMatrixPosition(startMatrix);
+    expect(startPosition.y).toBeCloseTo(0);
   });
 });

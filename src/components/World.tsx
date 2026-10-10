@@ -28,6 +28,9 @@ import {
 import PassPredictionPanel from "./PassPredictionPanel";
 import SettingsPanel from "./SettingsPanel";
 import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
+import EarthOverlays from "./EarthOverlays";
+import { listenForWebglContextLoss } from "../utils/globeContext";
+import LocalClock from "./LocalClock";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -66,14 +69,10 @@ const World: React.FC = () => {
   useEffect(() => {
     const canvas = globeContainerRef.current?.querySelector("canvas");
     if (!canvas) return;
-    const handleContextLost = (event: Event) => {
-      event.preventDefault();
+    return listenForWebglContextLoss(canvas, () => {
       setGlobeContextLost(true);
       setGlobeReady(false);
-    };
-    canvas.addEventListener("webglcontextlost", handleContextLost);
-    return () =>
-      canvas.removeEventListener("webglcontextlost", handleContextLost);
+    });
   }, [globeReady, globeRetryKey]);
 
   useEffect(() => {
@@ -97,6 +96,7 @@ const World: React.FC = () => {
     statusMessage,
     lastUpdated,
     selectSatellite,
+    clearSelection,
     refreshCatalog,
   } = useSatelliteCatalog(settings);
 
@@ -105,6 +105,7 @@ const World: React.FC = () => {
     satellitePositions,
     selectedPosition,
     orbitPoints,
+    snapshotVersion,
     showOrbit,
     setShowOrbit,
     followSelected,
@@ -113,6 +114,7 @@ const World: React.FC = () => {
     trackedSatellites,
     selectedNoradId,
     timeLapse.currentTime,
+    timeLapse.getEffectiveTime,
   );
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
@@ -122,6 +124,7 @@ const World: React.FC = () => {
 
   const {
     isTimeLapseActive,
+    isPaused,
     speed,
     speeds,
     toggleTimeLapse,
@@ -204,6 +207,7 @@ const World: React.FC = () => {
 
   // Filter satellites by altitude
   const filteredSatellites = useMemo(() => {
+    if (altitudeFilter === "none") return [];
     if (altitudeFilter === "all") return trackedSatellites;
     return trackedSatellites.filter(
       (sat: { noradId: number; name: string; periodSeconds: number }) => {
@@ -213,6 +217,21 @@ const World: React.FC = () => {
       },
     );
   }, [trackedSatellites, altitudeFilter]);
+
+  useEffect(() => {
+    if (altitudeFilter !== "none") return;
+    selectSatellite(null);
+    setFollowSelected(false);
+    setShowOrbit(false);
+    clearPasses();
+    setShowPassPrediction(false);
+  }, [
+    altitudeFilter,
+    clearPasses,
+    selectSatellite,
+    setFollowSelected,
+    setShowOrbit,
+  ]);
 
   // Search results
   const searchResults = useMemo(() => {
@@ -267,6 +286,14 @@ const World: React.FC = () => {
   const handleSelectSatellite = (noradId: number) => {
     selectSatellite(noradId);
     setShowOrbit(settings.showOrbitsByDefault);
+  };
+
+  const handleClearSelection = () => {
+    clearSelection();
+    setFollowSelected(false);
+    setShowOrbit(false);
+    clearPasses();
+    setShowPassPrediction(false);
   };
 
   // Get selected satellite name
@@ -377,7 +404,7 @@ const World: React.FC = () => {
                   labelSize={1}
                   labelDotRadius={0.5}
                   pathsData={
-                    orbitPoints.length > 0
+                    altitudeFilter !== "none" && orbitPoints.length > 0
                       ? [
                           {
                             points: orbitPoints,
@@ -391,10 +418,18 @@ const World: React.FC = () => {
                   pathPointLng="lng"
                   pathPointAlt="alt"
                   pathColor={(path: object) =>
-                    `${(path as { color?: string }).color ?? "#67e8f9"}cc`
+                    `${(path as { color?: string }).color ?? "#67e8f9"}e6`
                   }
-                  pathStroke={0.5}
+                  pathStroke={0.9}
                   pathTransitionDuration={0}
+                />
+              )}
+              {globeReady && (
+                <EarthOverlays
+                  globe={globeEl.current ?? null}
+                  time={timeLapse.currentTime}
+                  nightEnabled={settings.nightShading ?? true}
+                  cloudsEnabled={settings.cloudCover ?? false}
                 />
               )}
               {globeReady && (
@@ -402,6 +437,7 @@ const World: React.FC = () => {
                   <SatelliteMarkers
                     globe={globeEl.current ?? null}
                     positions={visiblePositions}
+                    snapshotVersion={snapshotVersion}
                     selectedNoradId={selectedNoradId}
                     trackedNoradIds={trackedNoradIds}
                     getTrackedColor={getTrackedColor}
@@ -413,6 +449,12 @@ const World: React.FC = () => {
           </GlobeErrorBoundary>
         )}
       </div>
+
+      <LocalClock
+        isPaused={isPaused}
+        isTimeLapseActive={isTimeLapseActive}
+        getTime={timeLapse.getEffectiveTime}
+      />
 
       {/* Compact Info Panel (when controls closed) */}
       {!showControls &&
@@ -633,6 +675,16 @@ const World: React.FC = () => {
                 ? " · Outside current filter"
                 : ""}
             </p>
+          )}
+
+          {selectedPosition && (
+            <button
+              className="mt-2 text-xs font-semibold text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-100"
+              onClick={handleClearSelection}
+              type="button"
+            >
+              Clear selection
+            </button>
           )}
 
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">

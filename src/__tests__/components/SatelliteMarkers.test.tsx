@@ -6,22 +6,26 @@ import SatelliteMarkers from "../../components/SatelliteMarkers";
 import type { SatellitePosition } from "../../utils/satellite";
 
 describe("SatelliteMarkers", () => {
-  it("repopulates a grown mesh and renders bright instance colors", async () => {
+  const createGlobe = (addedMeshes: THREE.InstancedMesh[]) => {
     const canvas = document.createElement("canvas");
-    const addedMeshes: THREE.InstancedMesh[] = [];
     const scene = {
       add: (object: THREE.Object3D) => {
         addedMeshes.push(object as THREE.InstancedMesh);
       },
       remove: vi.fn(),
     };
-    const globe = {
+    return {
       scene: () => scene,
       renderer: () => ({ domElement: canvas }),
       camera: () => new THREE.PerspectiveCamera(),
       getGlobeRadius: () => 100,
       getCoords: (lat: number) => ({ x: 101, y: lat, z: 0 }),
     } as unknown as GlobeMethods;
+  };
+
+  it("repopulates a grown mesh and renders bright instance colors", async () => {
+    const addedMeshes: THREE.InstancedMesh[] = [];
+    const globe = createGlobe(addedMeshes);
     const positions: SatellitePosition[] = Array.from(
       { length: 1025 },
       (_, index) => ({
@@ -32,7 +36,7 @@ describe("SatelliteMarkers", () => {
         alt: 0.05,
         altitudeKm: 400,
         velocityKph: 27_000,
-        color: "#67e8f9",
+        color: "#00f0ff",
         altitudeClass: "leo",
       }),
     );
@@ -58,6 +62,14 @@ describe("SatelliteMarkers", () => {
     expect((currentMesh.material as THREE.MeshBasicMaterial).toneMapped).toBe(
       false,
     );
+    expect((currentMesh.material as THREE.MeshBasicMaterial).transparent).toBe(
+      true,
+    );
+    expect(currentMesh.renderOrder).toBe(10);
+    expect((currentMesh.material as THREE.MeshBasicMaterial).vertexColors).toBe(
+      false,
+    );
+    expect(currentMesh.geometry.getAttribute("color")).toBeUndefined();
     expect(currentMesh.instanceColor).toBeInstanceOf(
       THREE.InstancedBufferAttribute,
     );
@@ -66,7 +78,7 @@ describe("SatelliteMarkers", () => {
     expect(selectedColor.getHex()).toBe(0xffffff);
     const catalogColor = new THREE.Color();
     currentMesh.getColorAt(1, catalogColor);
-    expect(catalogColor.getHex()).toBe(0x67e8f9);
+    expect(catalogColor.getHex()).toBe(0x00f0ff);
 
     const targetPositions = currentMesh.geometry.getAttribute(
       "instanceTargetPosition",
@@ -95,6 +107,7 @@ describe("SatelliteMarkers", () => {
       <SatelliteMarkers
         globe={globe}
         positions={movedPositions}
+        snapshotVersion={2}
         selectedNoradId={1}
         trackedNoradIds={[]}
         getTrackedColor={() => "#fbbf24"}
@@ -107,5 +120,83 @@ describe("SatelliteMarkers", () => {
     currentMesh.getMatrixAt(0, startMatrix);
     startPosition.setFromMatrixPosition(startMatrix);
     expect(startPosition.y).toBeCloseTo(0);
+  });
+
+  it("does not restart interpolation when filtered positions change within a snapshot", async () => {
+    const addedMeshes: THREE.InstancedMesh[] = [];
+    const globe = createGlobe(addedMeshes);
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    const position = (lat: number): SatellitePosition => ({
+      noradId: 1,
+      name: "Satellite 1",
+      lat,
+      lng: 0,
+      alt: 0.05,
+      altitudeKm: 400,
+      velocityKph: 27_000,
+      color: "#c084fc",
+      altitudeClass: "leo",
+    });
+
+    try {
+      const { rerender } = render(
+        <SatelliteMarkers
+          globe={globe}
+          positions={[position(0)]}
+          snapshotVersion={1}
+          selectedNoradId={1}
+          trackedNoradIds={[]}
+          getTrackedColor={() => "#fbbf24"}
+          onSelect={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(addedMeshes[0]?.count).toBe(1));
+
+      rerender(
+        <SatelliteMarkers
+          globe={globe}
+          positions={[position(10)]}
+          snapshotVersion={2}
+          selectedNoradId={1}
+          trackedNoradIds={[]}
+          getTrackedColor={() => "#fbbf24"}
+          onSelect={vi.fn()}
+        />,
+      );
+      await waitFor(() =>
+        expect(
+          addedMeshes[0]?.geometry
+            .getAttribute("instanceTargetPosition")
+            .getY(0),
+        ).toBe(10),
+      );
+
+      now.mockReturnValue(600);
+      rerender(
+        <SatelliteMarkers
+          globe={globe}
+          positions={[position(10)]}
+          snapshotVersion={2}
+          selectedNoradId={1}
+          trackedNoradIds={[]}
+          getTrackedColor={() => "#fbbf24"}
+          onSelect={vi.fn()}
+        />,
+      );
+      await waitFor(() =>
+        expect(
+          addedMeshes[0]?.geometry
+            .getAttribute("instanceTargetPosition")
+            .getY(0),
+        ).toBe(10),
+      );
+      const matrix = new THREE.Matrix4();
+      addedMeshes[0]?.getMatrixAt(0, matrix);
+      expect(new THREE.Vector3().setFromMatrixPosition(matrix).y).toBeCloseTo(
+        0,
+      );
+    } finally {
+      now.mockRestore();
+    }
   });
 });

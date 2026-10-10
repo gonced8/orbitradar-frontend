@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Check out published site data
         uses: actions/checkout@v4
@@ -43,7 +47,10 @@ jobs:
           if [[ "$FORCE_PROBE" == "true" ]]; then args+=(--force-probe); fi
           node scripts/refresh-catalog.mjs "${args[@]}"
 
-      - name: Publish catalog status and snapshot
+      - name: Refresh shared weather image
+        run: node scripts/refresh-clouds.mjs --site-dir site
+
+      - name: Publish catalog and weather data
         working-directory: site
         run: |
           git config user.name "github-actions[bot]"

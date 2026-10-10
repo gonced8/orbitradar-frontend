@@ -144,17 +144,17 @@ export type LocationPoint = { lat: number; lng: number; name: string };
 
 // Featured satellite colors
 const FEATURED_COLORS = new Map<number, string>([
-  [25544, "#ff4d4f"], // ISS
-  [20580, "#7dd3fc"], // Hubble
-  [25994, "#34d399"], // Terra
-  [33591, "#fbbf24"], // NOAA 19
+  [25544, "#ff9500"], // ISS
+  [20580, "#00f0ff"], // Hubble
+  [25994, "#7cff4f"], // Terra
+  [33591, "#ffd400"], // NOAA 19
 ]);
 
 // Altitude-based colors
 export const ALTITUDE_COLORS = {
-  leo: "#67e8f9", // < 2000 km (Cyan)
-  meo: "#a78bfa", // < 20000 km (Purple)
-  geo: "#f9a8d4", // >= 20000 km (Pink)
+  leo: "#c084fc", // < 2000 km (Violet)
+  meo: "#ffc857", // < 20000 km (Amber)
+  geo: "#ff70c8", // >= 20000 km (Pink)
 } as const;
 
 export const getSatelliteColor = (
@@ -255,6 +255,7 @@ export const ALTITUDE_FILTERS = {
   leo: { label: "LEO (< 2000 km)", value: "leo" },
   meo: { label: "MEO (2-20k km)", value: "meo" },
   geo: { label: "GEO (20k+ km)", value: "geo" },
+  none: { label: "None", value: "none" },
 } as const;
 
 export type AltitudeFilter = keyof typeof ALTITUDE_FILTERS;

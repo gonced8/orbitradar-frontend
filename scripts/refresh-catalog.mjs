@@ -8,6 +8,7 @@ export const SOURCE_URL =
 export const UPDATE_INTERVAL_MS = 2 * 60 * 60 * 1000;
 const MINIMUM_RECORDS = 1000;
 const SOURCE_RETRY_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const MAX_SOURCE_RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 const timestamp = (date) => date.toISOString();
@@ -181,15 +182,55 @@ export async function refreshCatalog({
     const noUpdate = body.match(
       /GP data has not updated since your last successful download of GROUP=active at ([^\r\n.]+)/i,
     );
-    const description =
-      response.status === 403 && noUpdate
-        ? "CelesTrak reports that the active group has not updated."
-        : `CelesTrak returned HTTP ${response.status}.`;
+    const retryAfter = response.headers?.get?.("retry-after");
+    const retryAfterMs = retryAfter
+      ? /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - nowMs)
+      : 0;
+    const previousRetryAt = Date.parse(previous?.retryAt ?? "");
+    const previousAttemptAt = Date.parse(previous?.attemptedAt ?? "");
+    const previousDelay =
+      Number.isFinite(previousRetryAt) && Number.isFinite(previousAttemptAt)
+        ? Math.max(
+            SOURCE_RETRY_INTERVAL_MS,
+            previousRetryAt - previousAttemptAt,
+          )
+        : SOURCE_RETRY_INTERVAL_MS;
+    const transient =
+      response.status === 408 ||
+      response.status === 425 ||
+      response.status === 429 ||
+      response.status >= 500;
+    if (response.status === 403 && noUpdate) {
+      const status = safeStatus(previous, {
+        state: "paused",
+        attemptedAt: timestamp(now),
+        manualProbeRequired: true,
+        message:
+          "CelesTrak reports that the active group has not updated. Automatic requests are stopped until an operator probe is requested.",
+      });
+      await atomicJson(statusFile, status);
+      return { queried: true, state: status.state };
+    }
+    const description = `CelesTrak returned HTTP ${response.status}.`;
+    const delay = Math.min(
+      MAX_SOURCE_RETRY_INTERVAL_MS,
+      Math.max(
+        retryAfterMs,
+        transient
+          ? Math.min(MAX_SOURCE_RETRY_INTERVAL_MS, previousDelay * 2)
+          : SOURCE_RETRY_INTERVAL_MS,
+      ),
+    );
     const status = safeStatus(previous, {
-      state: "paused",
+      state: transient ? "error" : "paused",
       attemptedAt: timestamp(now),
-      manualProbeRequired: true,
-      message: `${description} Automatic requests are stopped; an operator probe is required.`,
+      retryAt: timestamp(new Date(nowMs + delay)),
+      manualProbeRequired: !transient,
+      message: transient
+        ? `${description} The last valid snapshot is retained; the publisher will retry automatically.`
+        : `${description} Automatic requests are paused; an operator probe is required.`,
     });
     await atomicJson(statusFile, status);
     return { queried: true, state: status.state };

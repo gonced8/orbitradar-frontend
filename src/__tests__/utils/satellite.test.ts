@@ -6,6 +6,7 @@ import {
   getAltitudeClass,
   estimateAltitudeFromPeriod,
   ALTITUDE_COLORS,
+  ALTITUDE_FILTERS,
 } from "../../utils/satellite";
 
 // Sample TLE data for testing
@@ -46,11 +47,11 @@ describe("satellite utils", () => {
 
   describe("getSatelliteColor", () => {
     it("returns featured color for ISS (25544)", () => {
-      expect(getSatelliteColor(25544, 400)).toBe("#ff4d4f");
+      expect(getSatelliteColor(25544, 400)).toBe("#ff9500");
     });
 
     it("returns featured color for Hubble (20580)", () => {
-      expect(getSatelliteColor(20580, 550)).toBe("#7dd3fc");
+      expect(getSatelliteColor(20580, 550)).toBe("#00f0ff");
     });
 
     it("returns LEO color for altitude < 2000km", () => {
@@ -67,7 +68,7 @@ describe("satellite utils", () => {
 
     it("prioritizes featured colors over altitude colors", () => {
       // ISS is at ~400km (LEO altitude) but should use featured color
-      expect(getSatelliteColor(25544, 400)).toBe("#ff4d4f");
+      expect(getSatelliteColor(25544, 400)).toBe("#ff9500");
     });
   });
 
@@ -86,6 +87,13 @@ describe("satellite utils", () => {
     it("classifies GEO correctly", () => {
       expect(getAltitudeClass(20000)).toBe("geo");
       expect(getAltitudeClass(36000)).toBe("geo");
+    });
+  });
+
+  it("provides an Earth-only altitude filter", () => {
+    expect(ALTITUDE_FILTERS.none).toEqual({
+      label: "None",
+      value: "none",
     });
   });
 

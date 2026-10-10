@@ -9,6 +9,8 @@ export type Settings = {
   defaultAltitudeFilter: string;
   autoRefresh: boolean;
   refreshIntervalHours: number;
+  nightShading?: boolean;
+  cloudCover?: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -17,6 +19,8 @@ const DEFAULT_SETTINGS: Settings = {
   defaultAltitudeFilter: "all",
   autoRefresh: true,
   refreshIntervalHours: 8,
+  nightShading: true,
+  cloudCover: true,
 };
 
 export const useSettings = () => {
@@ -31,7 +35,7 @@ export const useSettings = () => {
           theme: ["dark", "light", "system"].includes(parsed.theme ?? "")
             ? parsed.theme!
             : DEFAULT_SETTINGS.theme,
-          defaultAltitudeFilter: ["all", "leo", "meo", "geo"].includes(
+          defaultAltitudeFilter: ["all", "leo", "meo", "geo", "none"].includes(
             parsed.defaultAltitudeFilter ?? "",
           )
             ? parsed.defaultAltitudeFilter!
@@ -49,6 +53,14 @@ export const useSettings = () => {
             typeof parsed.showOrbitsByDefault === "boolean"
               ? parsed.showOrbitsByDefault
               : DEFAULT_SETTINGS.showOrbitsByDefault,
+          nightShading:
+            typeof parsed.nightShading === "boolean"
+              ? parsed.nightShading
+              : DEFAULT_SETTINGS.nightShading,
+          cloudCover:
+            typeof parsed.cloudCover === "boolean"
+              ? parsed.cloudCover
+              : DEFAULT_SETTINGS.cloudCover,
         };
       }
     } catch {

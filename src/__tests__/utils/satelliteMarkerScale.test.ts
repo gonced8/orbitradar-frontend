@@ -10,7 +10,7 @@ describe("satellite marker scale", () => {
     const tracked = getSatelliteMarkerScale(100, false, true);
     const selected = getSatelliteMarkerScale(100, true, false);
 
-    expect(catalog).toBeGreaterThanOrEqual(0.5);
+    expect(catalog).toBeGreaterThanOrEqual(0.8);
     expect(tracked).toBeGreaterThan(catalog);
     expect(selected).toBeGreaterThan(tracked);
   });

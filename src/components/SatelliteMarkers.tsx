@@ -6,11 +6,18 @@ import {
   getSatelliteMarkerScale,
   SELECTED_SATELLITE_COLOR,
 } from "../utils/satelliteMarkerScale";
+import {
+  getMarkerInterpolationDuration,
+  getMarkerInterpolationProgress,
+  INITIAL_MARKER_INTERPOLATION_MS,
+  updateSnapshotInterval,
+} from "../utils/satelliteMarkerMotion";
 
 type Props = {
   globe: GlobeMethods | null;
   positions: SatellitePosition[];
-  selectedNoradId: number;
+  snapshotVersion?: number;
+  selectedNoradId: number | null;
   trackedNoradIds: number[];
   getTrackedColor: (noradId: number) => string;
   onSelect: (noradId: number) => void;
@@ -21,14 +28,8 @@ type MarkerMotion = {
   target: THREE.Vector3;
 };
 
-const MARKER_INTERPOLATION_MS = 1000;
-
-const interpolationProgress = (startedAt: number) =>
-  THREE.MathUtils.clamp(
-    (performance.now() - startedAt) / MARKER_INTERPOLATION_MS,
-    0,
-    1,
-  );
+const interpolationProgress = (startedAt: number, durationMs: number) =>
+  getMarkerInterpolationProgress(performance.now() - startedAt, durationMs);
 
 const interpolateAroundGlobe = (
   start: THREE.Vector3,
@@ -51,6 +52,7 @@ const interpolateAroundGlobe = (
 const SatelliteMarkers = ({
   globe,
   positions,
+  snapshotVersion = 0,
   selectedNoradId,
   trackedNoradIds,
   getTrackedColor,
@@ -60,8 +62,13 @@ const SatelliteMarkers = ({
   const capacityRef = useRef(1024);
   const [markerCapacity, setMarkerCapacity] = useState(1024);
   const interpolationStartedAtRef = useRef(performance.now());
+  const interpolationDurationRef = useRef(INITIAL_MARKER_INTERPOLATION_MS);
+  const snapshotIntervalRef = useRef(1000);
+  const lastSnapshotAtRef = useRef<number | null>(null);
   const interpolationUniformRef = useRef({ value: 1 });
   const markerMotionRef = useRef(new Map<number, MarkerMotion>());
+  const snapshotVersionRef = useRef(snapshotVersion);
+  const hasRenderedSnapshotRef = useRef(false);
   const latestRef = useRef({ positions, onSelect });
   const trackedIds = useMemo(() => new Set(trackedNoradIds), [trackedNoradIds]);
   latestRef.current = { positions, onSelect };
@@ -79,8 +86,9 @@ const SatelliteMarkers = ({
 
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
+      transparent: true,
+      opacity: 1,
       toneMapped: false,
-      vertexColors: true,
     });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.markerInterpolation = interpolationUniformRef.current;
@@ -133,12 +141,16 @@ gl_Position = projectionMatrix * mvPosition;`,
     );
     mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
     mesh.name = "orbitradar-satellite-markers";
+    // Render after the transparent Earth overlays so their darkening never
+    // bleeds through the sides of a marker.
+    mesh.renderOrder = 10;
     mesh.frustumCulled = false;
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.onBeforeRender = () => {
       interpolationUniformRef.current.value = interpolationProgress(
         interpolationStartedAtRef.current,
+        interpolationDurationRef.current,
       );
     };
     globe.scene().add(mesh);
@@ -220,19 +232,34 @@ gl_Position = projectionMatrix * mvPosition;`,
     const targetPositions = mesh.geometry.getAttribute(
       "instanceTargetPosition",
     ) as THREE.InstancedBufferAttribute;
+    const now = performance.now();
+    const isNewSnapshot =
+      snapshotVersion !== snapshotVersionRef.current ||
+      !hasRenderedSnapshotRef.current;
     const oldProgress = interpolationProgress(
       interpolationStartedAtRef.current,
+      interpolationDurationRef.current,
     );
     const nextMotion = new Map<number, MarkerMotion>();
     positions.forEach((position, index) => {
       const coords = globe.getCoords(position.lat, position.lng, position.alt);
       const target = new THREE.Vector3(coords.x, coords.y, coords.z);
       const previous = markerMotionRef.current.get(position.noradId);
-      const start = previous
-        ? interpolateAroundGlobe(previous.start, previous.target, oldProgress)
-        : target.clone();
-      nextMotion.set(position.noradId, { start, target });
-      transform.position.copy(start);
+      const motion =
+        previous && !isNewSnapshot
+          ? previous
+          : {
+              start: previous
+                ? interpolateAroundGlobe(
+                    previous.start,
+                    previous.target,
+                    oldProgress,
+                  )
+                : target.clone(),
+              target,
+            };
+      nextMotion.set(position.noradId, motion);
+      transform.position.copy(motion.start);
       transform.scale.setScalar(
         getSatelliteMarkerScale(
           globe.getGlobeRadius(),
@@ -242,7 +269,12 @@ gl_Position = projectionMatrix * mvPosition;`,
       );
       transform.updateMatrix();
       mesh.setMatrixAt(index, transform.matrix);
-      targetPositions.setXYZ(index, target.x, target.y, target.z);
+      targetPositions.setXYZ(
+        index,
+        motion.target.x,
+        motion.target.y,
+        motion.target.z,
+      );
       mesh.setColorAt(
         index,
         color.set(
@@ -255,8 +287,22 @@ gl_Position = projectionMatrix * mvPosition;`,
       );
     });
     markerMotionRef.current = nextMotion;
-    interpolationStartedAtRef.current = performance.now();
-    interpolationUniformRef.current.value = 0;
+    if (isNewSnapshot) {
+      if (lastSnapshotAtRef.current !== null) {
+        snapshotIntervalRef.current = updateSnapshotInterval(
+          snapshotIntervalRef.current,
+          now - lastSnapshotAtRef.current,
+        );
+        interpolationDurationRef.current = getMarkerInterpolationDuration(
+          snapshotIntervalRef.current,
+        );
+      }
+      snapshotVersionRef.current = snapshotVersion;
+      hasRenderedSnapshotRef.current = true;
+      lastSnapshotAtRef.current = now;
+      interpolationStartedAtRef.current = now;
+      interpolationUniformRef.current.value = 0;
+    }
     mesh.count = positions.length;
     mesh.instanceMatrix.needsUpdate = true;
     targetPositions.needsUpdate = true;
@@ -264,6 +310,7 @@ gl_Position = projectionMatrix * mvPosition;`,
   }, [
     globe,
     positions,
+    snapshotVersion,
     selectedNoradId,
     trackedIds,
     getTrackedColor,

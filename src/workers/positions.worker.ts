@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 import {
   buildTrackedSatellite,
-  OrbitPoint,
   SatellitePosition,
   SatelliteTle,
 } from "../utils/satellite";
@@ -11,9 +10,10 @@ type Request = {
   type?: "update" | "catalog";
   requestId?: number;
   time?: string;
-  selectedNoradId?: number;
+  selectedNoradId?: number | null;
   satellites?: SatelliteTle[];
   showOrbit?: boolean;
+  snapshotKey?: string;
 };
 
 let tracked: NonNullable<ReturnType<typeof buildTrackedSatellite>>[] = [];
@@ -41,13 +41,44 @@ self.onmessage = (event: MessageEvent<Request>) => {
       setTimeout(propagateBatch, 0);
       return;
     }
-    const selected = tracked.find((sat) => sat.noradId === selectedNoradId);
-    const orbitPoints: OrbitPoint[] =
-      selected && showOrbit ? propagateOrbit(selected, at) : [];
-    self.postMessage({ requestId, positions, orbitPoints });
+    self.postMessage({
+      type: "positions",
+      requestId,
+      positions,
+      snapshotKey: request.snapshotKey,
+    });
   };
   if (requestId === undefined) return;
   latestRequestId = requestId;
+  const selected = tracked.find((sat) => sat.noradId === selectedNoradId);
+  if (selected && showOrbit) {
+    const orbitPoints = propagateOrbit(selected, at);
+    const chunkSize = 12;
+    let orbitIndex = 0;
+    const publishOrbit = () => {
+      if (requestId !== latestRequestId) return;
+      const next = orbitPoints.slice(
+        0,
+        Math.min(orbitIndex + chunkSize, orbitPoints.length),
+      );
+      orbitIndex = next.length;
+      self.postMessage({
+        type: "orbit",
+        requestId,
+        orbitPoints: next,
+        complete: orbitIndex >= orbitPoints.length,
+      });
+      if (orbitIndex < orbitPoints.length) setTimeout(publishOrbit, 0);
+    };
+    publishOrbit();
+  } else {
+    self.postMessage({
+      type: "orbit",
+      requestId,
+      orbitPoints: [],
+      complete: true,
+    });
+  }
   propagateBatch();
 };
 

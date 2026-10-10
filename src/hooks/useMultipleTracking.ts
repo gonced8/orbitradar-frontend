@@ -78,16 +78,16 @@ export const useMultipleTracking = (
       if (index === -1) return "";
       // Use different colors for each tracked satellite
       const colors = [
-        "#ff4d4f",
-        "#7dd3fc",
-        "#34d399",
-        "#fbbf24",
-        "#a78bfa",
-        "#f9a8d4",
+        "#ff9500",
+        "#00f0ff",
+        "#7cff4f",
+        "#ffd400",
+        "#c084fc",
+        "#ff70c8",
         "#67e8f9",
-        "#10b981",
-        "#f59e0b",
-        "#8b5cf6",
+        "#2cffb7",
+        "#ff9f1c",
+        "#ffc857",
       ];
       return colors[index % colors.length];
     },

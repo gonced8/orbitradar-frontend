@@ -3,7 +3,7 @@ export const getSatelliteMarkerScale = (
   globeRadius: number,
   selected: boolean,
   tracked: boolean,
-): number => globeRadius * (selected ? 0.012 : tracked ? 0.008 : 0.005);
+): number => globeRadius * (selected ? 0.016 : tracked ? 0.012 : 0.008);
 
 export const SELECTED_SATELLITE_COLOR = "#ffffff";
 

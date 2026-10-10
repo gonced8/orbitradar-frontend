@@ -428,7 +428,7 @@ const World: React.FC = () => {
                   globe={globeEl.current ?? null}
                   time={timeLapse.currentTime}
                   nightEnabled={settings.nightShading ?? true}
-                  cloudsEnabled={settings.cloudCover ?? false}
+                  cloudsEnabled={settings.cloudCover ?? true}
                 />
               )}
               {globeReady && (

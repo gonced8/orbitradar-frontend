@@ -19,7 +19,7 @@ const cloudImageUrl = () => {
 // its coordinate system. Keep the same rotation when transforming the sun
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_OPACITY = 0.58;
+const CLOUD_OPACITY = 0.68;
 const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
@@ -53,9 +53,6 @@ export const EarthOverlays = ({
   });
   const cloudTextureRef = useRef<THREE.Texture | null>(null);
   const [cloudVersion, setCloudVersion] = useState("");
-  const [cloudAvailable, setCloudAvailable] = useState(
-    Boolean(import.meta.env.VITE_CLOUD_IMAGE_URL),
-  );
   const timeMs = time.getTime();
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
   const cloudUrl = useMemo(() => {
@@ -88,8 +85,9 @@ export const EarthOverlays = ({
           (status.state === "ready" || status.state === "stale") &&
           status.sourceId === "noaa-gfs-tcc" &&
           Boolean(status.fetchedAt);
-        setCloudAvailable(compatible);
-        if (compatible && status.fetchedAt) setCloudVersion(status.fetchedAt);
+        // The status document is only a cache-busting hint. Keep trying the
+        // published image if this small document is stale or unavailable.
+        setCloudVersion(compatible && status.fetchedAt ? status.fetchedAt : "");
       } catch {
         // Retain the current texture while the publisher status is unavailable.
       }
@@ -111,26 +109,30 @@ export const EarthOverlays = ({
     if (!globe) return;
     const globeMeshes: THREE.Mesh[] = [];
     globe.scene().traverse((object) => {
+      const candidate = object as THREE.Object3D & {
+        __globeObjType?: string;
+      };
       if (
         globeMeshes.length === 0 &&
-        object instanceof THREE.Mesh &&
-        (object as THREE.Mesh & { __globeObjType?: string }).__globeObjType ===
-          "globe"
+        candidate.type === "Mesh" &&
+        candidate.__globeObjType === "globe"
       )
-        globeMeshes.push(object);
+        globeMeshes.push(candidate as THREE.Mesh);
     });
     const globeMesh = globeMeshes[0];
     if (!globeMesh) return;
     const material = globeMesh.material;
-    if (!(material instanceof THREE.MeshPhongMaterial)) return;
-    const previousCompile = material.onBeforeCompile;
-    const previousCacheKey = material.customProgramCacheKey;
+    if (Array.isArray(material) || material.type !== "MeshPhongMaterial")
+      return;
+    const phongMaterial = material as THREE.MeshPhongMaterial;
+    const previousCompile = phongMaterial.onBeforeCompile;
+    const previousCacheKey = phongMaterial.customProgramCacheKey;
     const uniforms = nightUniformsRef.current;
     const cloudUniforms = cloudUniformsRef.current;
     uniforms.sunDirection.value.copy(toOverlayDirection(sunRef.current));
     uniforms.enabled.value = nightEnabledRef.current ? 1 : 0;
-    material.onBeforeCompile = (shader, renderer) => {
-      previousCompile.call(material, shader, renderer);
+    phongMaterial.onBeforeCompile = (shader, renderer) => {
+      previousCompile.call(phongMaterial, shader, renderer);
       shader.uniforms.orbitradarSunDirection = uniforms.sunDirection;
       shader.uniforms.orbitradarNightEnabled = uniforms.enabled;
       shader.uniforms.orbitradarCloudMap = cloudUniforms.map;
@@ -157,20 +159,20 @@ float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
 vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv);
-vec3 orbitradarCloudNightColor = vec3(0.055, 0.075, 0.14);
+vec3 orbitradarCloudNightColor = vec3(0.12, 0.16, 0.26);
 vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, vec3(1.0), mix(1.0, orbitradarDay, orbitradarNightEnabled));
 float orbitradarCloudAlpha = orbitradarCloudSample.a * orbitradarCloudOpacity * orbitradarCloudEnabled;
 outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
 #include <opaque_fragment>`,
         );
     };
-    material.customProgramCacheKey = () =>
-      `${previousCacheKey.call(material)}-orbitradar-cloud-surface-v2`;
-    material.needsUpdate = true;
+    phongMaterial.customProgramCacheKey = () =>
+      `${previousCacheKey.call(phongMaterial)}-orbitradar-cloud-surface-v3`;
+    phongMaterial.needsUpdate = true;
     return () => {
-      material.onBeforeCompile = previousCompile;
-      material.customProgramCacheKey = previousCacheKey;
-      material.needsUpdate = true;
+      phongMaterial.onBeforeCompile = previousCompile;
+      phongMaterial.customProgramCacheKey = previousCacheKey;
+      phongMaterial.needsUpdate = true;
     };
   }, [globe]);
 
@@ -190,11 +192,7 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
       cloudUniformsRef.current.enabled.value = 0;
     };
 
-    if (
-      !globe ||
-      !cloudsEnabled ||
-      (!cloudAvailable && !import.meta.env.VITE_CLOUD_IMAGE_URL)
-    ) {
+    if (!globe || !cloudsEnabled) {
       clearCloudTexture();
       return;
     }
@@ -233,7 +231,7 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
       cancelled = true;
       clearCloudTexture();
     };
-  }, [globe, cloudsEnabled, cloudAvailable, cloudUrl, emptyCloudTexture]);
+  }, [globe, cloudsEnabled, cloudUrl, emptyCloudTexture]);
 
   useEffect(
     () => () => {

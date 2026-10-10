@@ -31,7 +31,7 @@ describe("Earth solar geometry", () => {
     expect(scene.getObjectByName("orbitradar-night-side")).toBeUndefined();
     expect(scene.getObjectByName("orbitradar-cloud-cover")).toBeUndefined();
     expect(material.customProgramCacheKey()).toContain(
-      "orbitradar-cloud-surface",
+      "orbitradar-cloud-surface-v3",
     );
     const shader = {
       uniforms: {},
@@ -46,7 +46,7 @@ describe("Earth solar geometry", () => {
     expect(shader.fragmentShader).toContain("orbitradarCloudSample");
     view.unmount();
     expect(material.customProgramCacheKey()).not.toContain(
-      "orbitradar-cloud-surface",
+      "orbitradar-cloud-surface-v3",
     );
   });
 

@@ -46,7 +46,7 @@ describe("satellite utils", () => {
 
   describe("getSatelliteColor", () => {
     it("returns featured color for ISS (25544)", () => {
-      expect(getSatelliteColor(25544, 400)).toBe("#ff643d");
+      expect(getSatelliteColor(25544, 400)).toBe("#ff9500");
     });
 
     it("returns featured color for Hubble (20580)", () => {
@@ -67,7 +67,7 @@ describe("satellite utils", () => {
 
     it("prioritizes featured colors over altitude colors", () => {
       // ISS is at ~400km (LEO altitude) but should use featured color
-      expect(getSatelliteColor(25544, 400)).toBe("#ff643d");
+      expect(getSatelliteColor(25544, 400)).toBe("#ff9500");
     });
   });
 

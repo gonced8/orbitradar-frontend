@@ -84,7 +84,6 @@ const SatelliteMarkers = ({
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       toneMapped: false,
-      vertexColors: true,
     });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.markerInterpolation = interpolationUniformRef.current;

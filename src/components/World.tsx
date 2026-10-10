@@ -28,6 +28,7 @@ import {
 import PassPredictionPanel from "./PassPredictionPanel";
 import SettingsPanel from "./SettingsPanel";
 import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
+import EarthOverlays from "./EarthOverlays";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -122,6 +123,7 @@ const World: React.FC = () => {
 
   const {
     isTimeLapseActive,
+    isPaused,
     speed,
     speeds,
     toggleTimeLapse,
@@ -398,6 +400,14 @@ const World: React.FC = () => {
                 />
               )}
               {globeReady && (
+                <EarthOverlays
+                  globe={globeEl.current ?? null}
+                  time={timeLapse.currentTime}
+                  nightEnabled={settings.nightShading ?? true}
+                  cloudsEnabled={settings.cloudCover ?? false}
+                />
+              )}
+              {globeReady && (
                 <Suspense fallback={null}>
                   <SatelliteMarkers
                     globe={globeEl.current ?? null}
@@ -411,6 +421,31 @@ const World: React.FC = () => {
               )}
             </Suspense>
           </GlobeErrorBoundary>
+        )}
+      </div>
+
+      <div className="pointer-events-none absolute right-3 top-20 z-20 rounded-xl border border-white/15 bg-slate-950/75 px-3 py-2 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
+          {isPaused
+            ? "Paused UTC"
+            : isTimeLapseActive
+              ? "Simulation UTC"
+              : "Live UTC"}
+        </p>
+        <time
+          className="text-sm font-semibold tabular-nums"
+          dateTime={timeLapse.currentTime.toISOString()}
+        >
+          {timeLapse.currentTime.toLocaleString(undefined, {
+            timeZone: "UTC",
+            dateStyle: "short",
+            timeStyle: "medium",
+          })}
+        </time>
+        {settings.cloudCover && (
+          <p className="mt-0.5 text-[10px] text-slate-400">
+            Clouds: NASA daily fraction · latest available observation
+          </p>
         )}
       </div>
 

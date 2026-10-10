@@ -23,6 +23,7 @@ export const useSatellitePositions = (
   const [followSelected, setFollowSelected] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+  const orbitSelectionRef = useRef(selectedNoradId);
   const usesExternalTime = externalTime !== undefined;
   const effectiveTime = externalTime ?? liveTime;
   const catalogTles = useMemo(() => trackedSatellites, [trackedSatellites]);
@@ -65,14 +66,18 @@ export const useSatellitePositions = (
     workerRef.current = worker;
     worker.onmessage = (
       event: MessageEvent<{
+        type: "positions" | "orbit";
         requestId: number;
-        positions: SatellitePosition[];
-        orbitPoints: OrbitPoint[];
+        positions?: SatellitePosition[];
+        orbitPoints?: OrbitPoint[];
       }>,
     ) => {
       if (event.data.requestId !== requestIdRef.current) return;
-      setSatellitePositions(event.data.positions);
-      setOrbitPoints(event.data.orbitPoints);
+      if (event.data.type === "positions" && event.data.positions) {
+        setSatellitePositions(event.data.positions);
+      } else if (event.data.type === "orbit" && event.data.orbitPoints) {
+        setOrbitPoints(event.data.orbitPoints);
+      }
     };
     worker.onerror = () => {
       // Keep the catalog available if worker creation or propagation fails.
@@ -113,6 +118,10 @@ export const useSatellitePositions = (
 
   useEffect(() => {
     const requestId = ++requestIdRef.current;
+    if (orbitSelectionRef.current !== selectedNoradId) {
+      setOrbitPoints([]);
+      orbitSelectionRef.current = selectedNoradId;
+    }
     const worker = workerRef.current;
     if (worker) {
       worker.postMessage({

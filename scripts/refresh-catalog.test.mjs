@@ -168,4 +168,21 @@ describe("shared catalog publisher", () => {
     );
     expect(status).not.toContain("192.0.2.10");
   });
+
+  it("keeps transient source failures recoverable", async () => {
+    const siteDir = await makeSite();
+    const result = await refreshCatalog({
+      siteDir,
+      now: new Date("2025-01-01T00:00:00.000Z"),
+      fetchImpl: async () => response(429, "rate limited"),
+    });
+    expect(result).toEqual({ queried: true, state: "error" });
+    const status = JSON.parse(
+      await readFile(path.join(siteDir, "data/catalog-status.json"), "utf8"),
+    );
+    expect(status.manualProbeRequired).toBe(false);
+    expect(Date.parse(status.retryAt)).toBeGreaterThan(
+      Date.parse(status.attemptedAt),
+    );
+  });
 });

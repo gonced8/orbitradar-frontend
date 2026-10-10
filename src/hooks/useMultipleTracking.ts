@@ -78,7 +78,7 @@ export const useMultipleTracking = (
       if (index === -1) return "";
       // Use different colors for each tracked satellite
       const colors = [
-        "#ff643d",
+        "#ff9500",
         "#00f0ff",
         "#7cff4f",
         "#ffd400",

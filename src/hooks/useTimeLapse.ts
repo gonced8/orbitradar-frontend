@@ -123,6 +123,7 @@ export const useTimeLapse = () => {
 
   return {
     isTimeLapseActive,
+    isPaused,
     speed,
     speeds: TIME_LAPSE_SPEEDS,
     currentTime,

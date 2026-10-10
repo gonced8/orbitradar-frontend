@@ -58,6 +58,10 @@ describe("SatelliteMarkers", () => {
     expect((currentMesh.material as THREE.MeshBasicMaterial).toneMapped).toBe(
       false,
     );
+    expect((currentMesh.material as THREE.MeshBasicMaterial).vertexColors).toBe(
+      false,
+    );
+    expect(currentMesh.geometry.getAttribute("color")).toBeUndefined();
     expect(currentMesh.instanceColor).toBeInstanceOf(
       THREE.InstancedBufferAttribute,
     );

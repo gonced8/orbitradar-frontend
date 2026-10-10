@@ -122,6 +122,46 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </select>
             </div>
 
+            <div>
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm font-semibold text-slate-300">
+                  Night shading
+                </span>
+                <button
+                  className={`rounded-full px-4 py-2 text-sm ${settings.nightShading ? "bg-cyan-500/20 text-cyan-300" : "bg-white/10 text-slate-400"}`}
+                  aria-pressed={settings.nightShading}
+                  onClick={() =>
+                    onUpdate("nightShading", !settings.nightShading)
+                  }
+                  type="button"
+                >
+                  {settings.nightShading ? "ON" : "OFF"}
+                </button>
+              </label>
+              <p className="mt-1 text-xs text-slate-500">
+                Follow the simulated UTC sun position.
+              </p>
+            </div>
+
+            <div>
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm font-semibold text-slate-300">
+                  Cloud cover
+                </span>
+                <button
+                  className={`rounded-full px-4 py-2 text-sm ${settings.cloudCover ? "bg-cyan-500/20 text-cyan-300" : "bg-white/10 text-slate-400"}`}
+                  aria-pressed={settings.cloudCover}
+                  onClick={() => onUpdate("cloudCover", !settings.cloudCover)}
+                  type="button"
+                >
+                  {settings.cloudCover ? "ON" : "OFF"}
+                </button>
+              </label>
+              <p className="mt-1 text-xs text-slate-500">
+                NASA daily cloud fraction, latest observation.
+              </p>
+            </div>
+
             {/* Auto Refresh */}
             <div>
               <label className="flex items-center justify-between cursor-pointer">

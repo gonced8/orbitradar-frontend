@@ -1,22 +1,41 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import axios from "axios";
 import { Settings } from "./useSettings";
 import {
   SatelliteTle,
   SatelliteCatalogEntry,
+  SatelliteCatalogSnapshot,
   buildCatalogEntry,
-  parseTleCatalog,
+  parseOmmCatalogSnapshot,
 } from "../utils/satellite";
 import {
   readCache,
+  readCacheSourceTimestamp,
   writeCache,
   SATELLITE_CACHE_TIMESTAMP_KEY,
   isCacheFresh,
 } from "../utils/cache";
 
-const CELESTRAK_ACTIVE_URL =
-  "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=TLE";
+const CATALOG_URL = import.meta.env.VITE_CATALOG_URL ?? "/data/catalog.json";
+const CATALOG_STATUS_URL = "/data/catalog-status.json";
 const DEFAULT_NORAD_ID = 25544;
+
+type CatalogPublisherStatus = {
+  state?: "ready" | "paused" | "error";
+  message?: string;
+  retryAt?: string | null;
+  manualProbeRequired?: boolean;
+};
+
+const readPublisherStatus =
+  async (): Promise<CatalogPublisherStatus | null> => {
+    try {
+      const response = await fetch(CATALOG_STATUS_URL, { cache: "no-cache" });
+      if (!response.ok) return null;
+      return (await response.json()) as CatalogPublisherStatus;
+    } catch {
+      return null;
+    }
+  };
 
 export const useSatelliteCatalog = (
   settings?: Pick<Settings, "autoRefresh" | "refreshIntervalHours">,
@@ -28,14 +47,13 @@ export const useSatelliteCatalog = (
     useState<number>(DEFAULT_NORAD_ID);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [statusMessage, setStatusMessage] = useState<string>(
-    "Loading the active satellite catalog...",
+    "Loading the shared satellite catalog...",
   );
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const refreshInProgressRef = useRef(false);
 
-  // Apply catalog to state
   const applyCatalog = useCallback(
-    (catalog: SatelliteTle[], message: string) => {
+    (catalog: SatelliteTle[], message: string, sourceTimestamp?: string) => {
       const tracked = catalog
         .map(buildCatalogEntry)
         .filter((item): item is SatelliteCatalogEntry => Boolean(item));
@@ -48,43 +66,65 @@ export const useSatelliteCatalog = (
           ? current
           : (tracked[0]?.noradId ?? DEFAULT_NORAD_ID),
       );
-      let timestamp: string | null = null;
+      let cachedAt: string | null = null;
       try {
-        timestamp = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
+        cachedAt = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
       } catch {
         /* Storage can be disabled. */
       }
-      setLastUpdated(timestamp ?? new Date().toISOString());
+      setLastUpdated(
+        sourceTimestamp ??
+          readCacheSourceTimestamp() ??
+          cachedAt ??
+          new Date().toISOString(),
+      );
     },
     [],
   );
 
-  // Force refresh catalog
   const refreshCatalog = useCallback(async () => {
     if (refreshInProgressRef.current) return;
     refreshInProgressRef.current = true;
     setIsLoading(true);
-    setStatusMessage("Fetching fresh satellite catalog from CelesTrak...");
+    setStatusMessage("Checking for the latest shared satellite catalog...");
+    let publisherStatus: CatalogPublisherStatus | null = null;
 
     try {
-      const response = await axios.get<string>(CELESTRAK_ACTIVE_URL);
-      const catalog = parseTleCatalog(response.data);
-      writeCache(catalog);
-      applyCatalog(
-        catalog,
-        "Tracking {count} active satellites from CelesTrak.",
+      const [response, status] = await Promise.all([
+        fetch(CATALOG_URL, { cache: "no-cache" }),
+        readPublisherStatus(),
+      ]);
+      publisherStatus = status;
+      if (!response.ok)
+        throw new Error(`Shared catalog request failed (${response.status}).`);
+      const parsed = parseOmmCatalogSnapshot(
+        (await response.json()) as SatelliteCatalogSnapshot,
       );
+      writeCache(parsed.satellites, parsed.fetchedAt);
+      let message = "Tracking {count} satellites from the shared catalog.";
+      if (publisherStatus?.state === "paused") {
+        message = publisherStatus.message
+          ? `${publisherStatus.message} Using the last valid snapshot ({count} satellites).`
+          : "Catalog publishing is paused for review; using the last valid snapshot ({count} satellites).";
+      } else if (publisherStatus?.state === "error") {
+        message =
+          "Catalog refresh failed; using the last valid published snapshot ({count} satellites).";
+      }
+      applyCatalog(parsed.satellites, message, parsed.fetchedAt);
     } catch (error) {
-      console.error("Error fetching active satellite catalog:", error);
+      console.warn("Unable to read shared satellite catalog:", error);
       const staleCache = readCache(true);
       if (staleCache) {
         applyCatalog(
           staleCache,
-          "CelesTrak is unavailable; tracking {count} satellites from stale cache.",
+          publisherStatus?.message
+            ? `${publisherStatus.message} Showing the last saved snapshot ({count} satellites).`
+            : "Shared catalog is unavailable; showing the last saved snapshot ({count} satellites).",
         );
       } else {
         setStatusMessage(
-          "Unable to load the satellite catalog. Check your connection and refresh.",
+          publisherStatus?.message ??
+            "The shared satellite catalog is not available yet. Try again after it has been published.",
         );
       }
     } finally {
@@ -93,7 +133,6 @@ export const useSatelliteCatalog = (
     }
   }, [applyCatalog]);
 
-  // Load catalog on mount
   useEffect(() => {
     const cached = readCache(true);
     let timestamp: string | null = null;
@@ -104,49 +143,36 @@ export const useSatelliteCatalog = (
     }
 
     if (cached && isCacheFresh(timestamp)) {
-      applyCatalog(cached, "Tracking {count} active satellites from cache.");
-      setLastUpdated(timestamp);
+      applyCatalog(cached, "Tracking {count} satellites from local cache.");
       setIsLoading(false);
       return;
     }
 
-    // Keep stale data visible while refreshing it.
     if (cached) {
       applyCatalog(
         cached,
-        "Tracking {count} active satellites from stale cache (updating...)",
+        "Checking for an update; showing the last saved snapshot ({count} satellites).",
       );
-      setLastUpdated(timestamp);
+      setLastUpdated(readCacheSourceTimestamp() ?? timestamp);
     }
-
-    // Fetch update
-    refreshCatalog();
+    void refreshCatalog();
   }, [applyCatalog, refreshCatalog]);
 
   useEffect(() => {
     if (settings?.autoRefresh === false) return;
-    let timeout: number | undefined;
-    const schedule = () => {
-      if (timeout !== undefined) window.clearTimeout(timeout);
-      const interval = (settings?.refreshIntervalHours ?? 8) * 60 * 60 * 1000;
-      timeout = window.setTimeout(() => {
-        void refreshCatalog().finally(schedule);
-      }, interval);
-    };
-    schedule();
-    return () => {
-      if (timeout !== undefined) window.clearTimeout(timeout);
-    };
+    const interval = (settings?.refreshIntervalHours ?? 8) * 60 * 60 * 1000;
+    const timeout = window.setInterval(() => {
+      void refreshCatalog();
+    }, interval);
+    return () => window.clearInterval(timeout);
   }, [refreshCatalog, settings?.autoRefresh, settings?.refreshIntervalHours]);
 
-  // Get selected satellite
   const getSelectedSatellite = useCallback((): SatelliteCatalogEntry | null => {
     return (
       trackedSatellites.find((item) => item.noradId === selectedNoradId) ?? null
     );
   }, [trackedSatellites, selectedNoradId]);
 
-  // Select satellite
   const selectSatellite = useCallback((noradId: number) => {
     setSelectedNoradId(noradId);
   }, []);

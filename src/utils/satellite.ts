@@ -1,12 +1,124 @@
 import * as satellite from "satellite.js";
+import type { OMMJsonObject } from "satellite.js";
 
 export const EARTH_RADIUS_KM = 6371;
 
-export type SatelliteTle = {
+type SatelliteIdentity = {
   noradId: number;
   name: string;
-  line1: string;
-  line2: string;
+};
+
+export type SatelliteTle = SatelliteIdentity &
+  (
+    | { line1: string; line2: string; omm?: never }
+    | { omm: OMMJsonObject; line1?: never; line2?: never }
+  );
+
+export type SatelliteCatalogSnapshot = {
+  schemaVersion: 1;
+  fetchedAt: string;
+  satellites: OMMJsonObject[];
+};
+
+export type OmmSatelliteInput = Record<string, unknown>;
+
+export const normalizeOmmSatellite = (
+  input: OmmSatelliteInput,
+): SatelliteTle | null => {
+  const noradId = Number(input.NORAD_CAT_ID);
+  const meanMotion = Number(input.MEAN_MOTION);
+  const epoch = typeof input.EPOCH === "string" ? input.EPOCH : "";
+  const finiteFields = [
+    input.ECCENTRICITY,
+    input.INCLINATION,
+    input.RA_OF_ASC_NODE,
+    input.ARG_OF_PERICENTER,
+    input.MEAN_ANOMALY,
+  ].map(Number);
+  if (
+    !Number.isSafeInteger(noradId) ||
+    noradId < 1 ||
+    !Number.isFinite(meanMotion) ||
+    meanMotion <= 0 ||
+    Number.isNaN(Date.parse(epoch)) ||
+    finiteFields.some((value) => !Number.isFinite(value)) ||
+    finiteFields[0] < 0 ||
+    finiteFields[0] >= 1 ||
+    finiteFields[1] < 0 ||
+    finiteFields[1] > 180
+  )
+    return null;
+
+  const name =
+    typeof input.OBJECT_NAME === "string" && input.OBJECT_NAME.trim()
+      ? input.OBJECT_NAME.trim()
+      : `NORAD ${noradId}`;
+  const optionalNumber = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const omm = {
+    ...input,
+    OBJECT_NAME: name,
+    OBJECT_ID:
+      typeof input.OBJECT_ID === "string" && input.OBJECT_ID
+        ? input.OBJECT_ID
+        : `NORAD ${noradId}`,
+    EPOCH: epoch,
+    MEAN_MOTION: meanMotion,
+    ECCENTRICITY: finiteFields[0],
+    INCLINATION: finiteFields[1],
+    RA_OF_ASC_NODE: finiteFields[2],
+    ARG_OF_PERICENTER: finiteFields[3],
+    MEAN_ANOMALY: finiteFields[4],
+    BSTAR: optionalNumber(input.BSTAR),
+    MEAN_MOTION_DOT: optionalNumber(input.MEAN_MOTION_DOT),
+    MEAN_MOTION_DDOT: optionalNumber(input.MEAN_MOTION_DDOT),
+    ELEMENT_SET_NO: optionalNumber(input.ELEMENT_SET_NO),
+    NORAD_CAT_ID: noradId,
+  } satisfies OMMJsonObject;
+
+  return { noradId, name, omm };
+};
+
+export const parseOmmCatalogSnapshot = (
+  input: unknown,
+): { satellites: SatelliteTle[]; fetchedAt: string } => {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    !("schemaVersion" in input) ||
+    input.schemaVersion !== 1 ||
+    !("fetchedAt" in input) ||
+    typeof input.fetchedAt !== "string" ||
+    Number.isNaN(Date.parse(input.fetchedAt)) ||
+    !("satellites" in input) ||
+    !Array.isArray(input.satellites)
+  ) {
+    throw new Error("The shared satellite catalog has an invalid format.");
+  }
+  const satellites = input.satellites
+    .map((record) =>
+      record && typeof record === "object"
+        ? normalizeOmmSatellite(record as OmmSatelliteInput)
+        : null,
+    )
+    .filter((record): record is SatelliteTle => Boolean(record));
+  if (!satellites.length)
+    throw new Error("The shared satellite catalog contains no valid records.");
+  return { satellites, fetchedAt: input.fetchedAt };
+};
+
+export const isSatelliteTle = (value: unknown): value is SatelliteTle => {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  if (!Number.isSafeInteger(record.noradId) || typeof record.name !== "string")
+    return false;
+  if (record.omm && typeof record.omm === "object") {
+    const normalized = normalizeOmmSatellite(record.omm as OmmSatelliteInput);
+    return normalized?.noradId === record.noradId;
+  }
+  return typeof record.line1 === "string" && typeof record.line2 === "string";
 };
 
 export type SatelliteCatalogEntry = SatelliteTle & {
@@ -91,7 +203,9 @@ export const parseTleCatalog = (rawTle: string): SatelliteTle[] => {
 export const buildTrackedSatellite = (
   tle: SatelliteTle,
 ): TrackedSatellite | null => {
-  const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
+  const satrec = tle.omm
+    ? satellite.json2satrec(tle.omm)
+    : satellite.twoline2satrec(tle.line1!, tle.line2!);
   if (satrec.error) return null;
   return {
     ...tle,
@@ -103,9 +217,9 @@ export const buildTrackedSatellite = (
 export const buildCatalogEntry = (
   tle: SatelliteTle,
 ): SatelliteCatalogEntry | null => {
-  const meanMotionRevolutionsPerDay = Number.parseFloat(
-    tle.line2.slice(52, 63),
-  );
+  const meanMotionRevolutionsPerDay = tle.omm
+    ? Number(tle.omm.MEAN_MOTION)
+    : Number.parseFloat(tle.line2!.slice(52, 63));
   if (
     !Number.isFinite(meanMotionRevolutionsPerDay) ||
     meanMotionRevolutionsPerDay <= 0

@@ -17,7 +17,7 @@ type Props = {
   globe: GlobeMethods | null;
   positions: SatellitePosition[];
   snapshotVersion?: number;
-  selectedNoradId: number;
+  selectedNoradId: number | null;
   trackedNoradIds: number[];
   getTrackedColor: (noradId: number) => string;
   onSelect: (noradId: number) => void;

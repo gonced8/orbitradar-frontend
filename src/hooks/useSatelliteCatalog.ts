@@ -43,8 +43,9 @@ export const useSatelliteCatalog = (
   const [trackedSatellites, setTrackedSatellites] = useState<
     SatelliteCatalogEntry[]
   >([]);
-  const [selectedNoradId, setSelectedNoradId] =
-    useState<number>(DEFAULT_NORAD_ID);
+  const [selectedNoradId, setSelectedNoradId] = useState<number | null>(
+    DEFAULT_NORAD_ID,
+  );
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [statusMessage, setStatusMessage] = useState<string>(
     "Loading the shared satellite catalog...",
@@ -61,11 +62,12 @@ export const useSatelliteCatalog = (
       setStatusMessage(
         message.replace("{count}", tracked.length.toLocaleString()),
       );
-      setSelectedNoradId((current) =>
-        tracked.some((item) => item.noradId === current)
+      setSelectedNoradId((current) => {
+        if (current === null) return null;
+        return tracked.some((item) => item.noradId === current)
           ? current
-          : (tracked[0]?.noradId ?? DEFAULT_NORAD_ID),
-      );
+          : (tracked[0]?.noradId ?? null);
+      });
       let cachedAt: string | null = null;
       try {
         cachedAt = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
@@ -173,8 +175,12 @@ export const useSatelliteCatalog = (
     );
   }, [trackedSatellites, selectedNoradId]);
 
-  const selectSatellite = useCallback((noradId: number) => {
+  const selectSatellite = useCallback((noradId: number | null) => {
     setSelectedNoradId(noradId);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedNoradId(null);
   }, []);
 
   return {
@@ -185,6 +191,7 @@ export const useSatelliteCatalog = (
     lastUpdated,
     getSelectedSatellite,
     selectSatellite,
+    clearSelection,
     refreshCatalog,
   };
 };

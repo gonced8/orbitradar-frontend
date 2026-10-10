@@ -10,7 +10,7 @@ type Request = {
   type?: "update" | "catalog";
   requestId?: number;
   time?: string;
-  selectedNoradId?: number;
+  selectedNoradId?: number | null;
   satellites?: SatelliteTle[];
   showOrbit?: boolean;
   snapshotKey?: string;

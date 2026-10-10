@@ -22,6 +22,17 @@ describe("useTimeLapse", () => {
     expect(result.current.currentTime.getTime()).toBe(Date.now());
   });
 
+  it("provides a continuously advancing live time for selected telemetry", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const { result } = renderHook(() => useTimeLapse());
+    const first = result.current.getEffectiveTime().getTime();
+
+    act(() => vi.advanceTimersByTime(250));
+
+    expect(result.current.getEffectiveTime().getTime()).toBe(first + 250);
+  });
+
   it("advances at the selected speed, pauses without resetting, and resumes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));

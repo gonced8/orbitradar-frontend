@@ -95,6 +95,7 @@ const World: React.FC = () => {
     statusMessage,
     lastUpdated,
     selectSatellite,
+    clearSelection,
     refreshCatalog,
   } = useSatelliteCatalog(settings);
 
@@ -112,6 +113,7 @@ const World: React.FC = () => {
     trackedSatellites,
     selectedNoradId,
     timeLapse.currentTime,
+    timeLapse.getEffectiveTime,
   );
 
   const { userLocation, locateUser, clearUserLocation } = useUserLocation();
@@ -267,6 +269,14 @@ const World: React.FC = () => {
   const handleSelectSatellite = (noradId: number) => {
     selectSatellite(noradId);
     setShowOrbit(settings.showOrbitsByDefault);
+  };
+
+  const handleClearSelection = () => {
+    clearSelection();
+    setFollowSelected(false);
+    setShowOrbit(false);
+    clearPasses();
+    setShowPassPrediction(false);
   };
 
   // Get selected satellite name
@@ -672,6 +682,16 @@ const World: React.FC = () => {
                 ? " · Outside current filter"
                 : ""}
             </p>
+          )}
+
+          {selectedPosition && (
+            <button
+              className="mt-2 text-xs font-semibold text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-100"
+              onClick={handleClearSelection}
+              type="button"
+            >
+              Clear selection
+            </button>
           )}
 
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">

@@ -58,6 +58,25 @@ describe("useSatelliteCatalog", () => {
     ).toBe(true);
   });
 
+  it("allows the panel to clear the selected satellite", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input) === "/data/catalog.json"
+          ? new Response(JSON.stringify(snapshot), { status: 200 })
+          : new Response(JSON.stringify({ state: "ready" }), { status: 200 }),
+      ),
+    );
+    const { result } = renderHook(() =>
+      useSatelliteCatalog({ autoRefresh: false, refreshIntervalHours: 1 }),
+    );
+
+    await waitFor(() => expect(result.current.selectedNoradId).toBe(25544));
+    act(() => result.current.clearSelection());
+
+    expect(result.current.selectedNoradId).toBeNull();
+  });
+
   it("shows cached data when the shared snapshot cannot be fetched", async () => {
     const fetchMock = vi.fn(
       async () => new Response("offline", { status: 503 }),

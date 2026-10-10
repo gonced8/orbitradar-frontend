@@ -11,8 +11,9 @@ const POSITION_TICK_MS = 1000;
 
 export const useSatellitePositions = (
   trackedSatellites: SatelliteCatalogEntry[],
-  selectedNoradId: number,
+  selectedNoradId: number | null,
   externalTime?: Date,
+  getCurrentTime?: () => Date,
 ) => {
   const [liveTime, setLiveTime] = useState(() => new Date());
   const [satellitePositions, setSatellitePositions] = useState<
@@ -29,6 +30,24 @@ export const useSatellitePositions = (
   const snapshotKeyRef = useRef<string | null>(null);
   const usesExternalTime = externalTime !== undefined;
   const effectiveTime = externalTime ?? liveTime;
+  const selectedTrackedSatellite = useMemo(() => {
+    if (selectedNoradId === null) return null;
+    const entry = trackedSatellites.find(
+      (satellite) => satellite.noradId === selectedNoradId,
+    );
+    return entry ? buildTrackedSatellite(entry) : null;
+  }, [trackedSatellites, selectedNoradId]);
+  const [displayedSelectedPosition, setDisplayedSelectedPosition] = useState<
+    SatellitePosition | null | undefined
+  >(undefined);
+  const telemetryRef = useRef({
+    satellite: selectedTrackedSatellite,
+    getTime: getCurrentTime ?? (() => effectiveTime),
+  });
+  telemetryRef.current = {
+    satellite: selectedTrackedSatellite,
+    getTime: getCurrentTime ?? (() => effectiveTime),
+  };
   const catalogTles = useMemo(() => trackedSatellites, [trackedSatellites]);
   const latestRef = useRef({
     trackedSatellites,
@@ -134,6 +153,32 @@ export const useSatellitePositions = (
     });
   }, [catalogTles]);
 
+  // The worker intentionally publishes the full catalog at a modest cadence.
+  // Refresh only the selected satellite more often for responsive telemetry;
+  // this re-propagates the orbit instead of linearly interpolating lat/lng,
+  // which would be inaccurate around the date line and the poles.
+  useEffect(() => {
+    let lastTimeMs: number | null = null;
+    const updateSelectedPosition = () => {
+      const { satellite, getTime } = telemetryRef.current;
+      if (!satellite) {
+        lastTimeMs = null;
+        setDisplayedSelectedPosition(null);
+        return;
+      }
+      const at = getTime();
+      const timeMs = at.getTime();
+      if (timeMs === lastTimeMs) return;
+      lastTimeMs = timeMs;
+      setDisplayedSelectedPosition(propagatePosition(satellite, at));
+    };
+
+    setDisplayedSelectedPosition(undefined);
+    updateSelectedPosition();
+    const timer = window.setInterval(updateSelectedPosition, 100);
+    return () => window.clearInterval(timer);
+  }, [selectedTrackedSatellite]);
+
   useEffect(() => {
     const requestId = ++requestIdRef.current;
     if (orbitSelectionRef.current !== selectedNoradId) {
@@ -175,12 +220,16 @@ export const useSatellitePositions = (
     acceptPositionSnapshot,
   ]);
 
-  const selectedPosition = useMemo(
+  const snapshotSelectedPosition = useMemo(
     () =>
       satellitePositions.find((item) => item.noradId === selectedNoradId) ??
       null,
     [satellitePositions, selectedNoradId],
   );
+  const selectedPosition =
+    displayedSelectedPosition === undefined
+      ? snapshotSelectedPosition
+      : displayedSelectedPosition;
 
   return {
     time: liveTime,

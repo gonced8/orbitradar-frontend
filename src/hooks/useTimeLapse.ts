@@ -32,7 +32,8 @@ export const useTimeLapse = () => {
   const timeOffsetMs = effectiveTimeMs - liveTimeMs;
 
   const getEffectiveTime = useCallback((): Date => {
-    if (isPaused || !isTimeLapseActive) return new Date(effectiveTimeMs);
+    if (isPaused) return new Date(effectiveTimeMs);
+    if (!isTimeLapseActive) return new Date();
     return new Date(simulationTimeMs + (Date.now() - updatedAt) * speed);
   }, [
     effectiveTimeMs,
@@ -134,6 +135,7 @@ export const useTimeLapse = () => {
     setTimeLapseSpeed,
     resetTime,
     getSpeedLabel,
+    getEffectiveTime,
     getTimeOffsetDisplay,
   };
 };

@@ -15,7 +15,6 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
-    "pngjs": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-globe.gl": "^2.27.2",

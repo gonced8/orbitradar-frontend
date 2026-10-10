@@ -31,8 +31,15 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Install weather publisher dependencies
+        run: python -m pip install -r requirements-weather.txt
 
       - name: Check out published site data
         uses: actions/checkout@v4
@@ -49,7 +56,7 @@ jobs:
           node scripts/refresh-catalog.mjs "${args[@]}"
 
       - name: Refresh shared weather image
-        run: node scripts/refresh-clouds.mjs --site-dir site
+        run: python scripts/refresh_clouds.py --site-dir site
 
       - name: Publish catalog and weather data
         working-directory: site

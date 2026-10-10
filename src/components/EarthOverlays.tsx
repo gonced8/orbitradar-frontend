@@ -36,8 +36,15 @@ export const EarthOverlays = ({
     sunDirection: { value: new THREE.Vector3() },
     enabled: { value: 1 },
   });
+  const cloudUniformsRef = useRef({
+    sunDirection: { value: new THREE.Vector3() },
+    enabled: { value: 1 },
+  });
   const cloudRef = useRef<THREE.Mesh | null>(null);
   const [cloudVersion, setCloudVersion] = useState("");
+  const [cloudAvailable, setCloudAvailable] = useState(
+    Boolean(import.meta.env.VITE_CLOUD_IMAGE_URL),
+  );
   const timeMs = time.getTime();
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
   const cloudUrl = useMemo(() => {
@@ -62,10 +69,16 @@ export const EarthOverlays = ({
         if (!response.ok) return;
         const status = (await response.json()) as {
           state?: string;
+          sourceId?: string;
           fetchedAt?: string;
         };
-        if (!cancelled && status.state === "ready" && status.fetchedAt)
-          setCloudVersion(status.fetchedAt);
+        if (cancelled) return;
+        const compatible =
+          (status.state === "ready" || status.state === "stale") &&
+          status.sourceId === "noaa-gfs-tcc" &&
+          Boolean(status.fetchedAt);
+        setCloudAvailable(compatible);
+        if (compatible && status.fetchedAt) setCloudVersion(status.fetchedAt);
       } catch {
         // Retain the current texture while the publisher status is unavailable.
       }
@@ -145,17 +158,29 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
     const uniforms = nightUniformsRef.current;
     uniforms.enabled.value = nightEnabled ? 1 : 0;
     uniforms.sunDirection.value.copy(toOverlayDirection(sun));
+    cloudUniformsRef.current.enabled.value = nightEnabled ? 1 : 0;
+    cloudUniformsRef.current.sunDirection.value.copy(toOverlayDirection(sun));
   }, [nightEnabled, sun]);
 
   useEffect(() => {
-    if (!globe || !cloudsEnabled) {
+    const disposeCloud = () => {
       if (cloudRef.current && globe) globe.scene().remove(cloudRef.current);
       const material = cloudRef.current?.material as
-        THREE.MeshBasicMaterial | undefined;
-      material?.map?.dispose();
+        THREE.ShaderMaterial | undefined;
+      const texture = material?.uniforms.cloudMap?.value as
+        THREE.Texture | undefined;
+      texture?.dispose();
       cloudRef.current?.geometry.dispose();
       material?.dispose();
       cloudRef.current = null;
+    };
+
+    if (
+      !globe ||
+      !cloudsEnabled ||
+      (!cloudAvailable && !import.meta.env.VITE_CLOUD_IMAGE_URL)
+    ) {
+      disposeCloud();
       return;
     }
     const loader = new THREE.TextureLoader();
@@ -169,30 +194,65 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
           return;
         }
         texture.colorSpace = THREE.SRGBColorSpace;
-        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.minFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
-        texture.generateMipmaps = false;
+        texture.generateMipmaps = true;
+        texture.anisotropy = Math.min(
+          4,
+          globe.renderer().capabilities.getMaxAnisotropy(),
+        );
         texture.needsUpdate = true;
+        const uniforms = cloudUniformsRef.current;
+        uniforms.sunDirection.value.copy(toOverlayDirection(sunRef.current));
+        uniforms.enabled.value = nightEnabledRef.current ? 1 : 0;
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(
             globe.getGlobeRadius() * CLOUD_RADIUS_SCALE,
             64,
             32,
           ),
-          new THREE.MeshBasicMaterial({
-            map: texture,
+          new THREE.ShaderMaterial({
+            uniforms: {
+              cloudMap: { value: texture },
+              sunDirection: uniforms.sunDirection,
+              nightEnabled: uniforms.enabled,
+              opacity: { value: 0.72 },
+            },
             transparent: true,
-            opacity: 0.58,
-            alphaTest: 0.05,
             depthTest: true,
             depthWrite: false,
             side: THREE.FrontSide,
+            vertexShader: `
+              varying vec2 vUv;
+              varying vec3 vNormal;
+              void main() {
+                vUv = uv;
+                vNormal = normalize(normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform sampler2D cloudMap;
+              uniform vec3 sunDirection;
+              uniform float nightEnabled;
+              uniform float opacity;
+              varying vec2 vUv;
+              varying vec3 vNormal;
+              void main() {
+                vec4 cloud = texture2D(cloudMap, vUv);
+                float daylight = dot(normalize(vNormal), normalize(sunDirection));
+                float day = mix(1.0, smoothstep(-0.22, 0.12, daylight), nightEnabled);
+                vec3 cloudColor = mix(vec3(0.22, 0.28, 0.45), vec3(1.0), day);
+                gl_FragColor = vec4(cloudColor, cloud.a * opacity);
+              }
+            `,
           }),
         );
         mesh.name = "orbitradar-cloud-cover";
         mesh.rotation.y = GLOBE_TEXTURE_ROTATION_Y;
+        mesh.renderOrder = 2;
         globe.scene().add(mesh);
         cloudRef.current = mesh;
       },
@@ -203,15 +263,9 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
     );
     return () => {
       cancelled = true;
-      if (cloudRef.current && globe) globe.scene().remove(cloudRef.current);
-      const material = cloudRef.current?.material as
-        THREE.MeshBasicMaterial | undefined;
-      material?.map?.dispose();
-      cloudRef.current?.geometry.dispose();
-      material?.dispose();
-      cloudRef.current = null;
+      disposeCloud();
     };
-  }, [globe, cloudsEnabled, cloudUrl]);
+  }, [globe, cloudsEnabled, cloudAvailable, cloudUrl]);
 
   return null;
 };

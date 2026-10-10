@@ -13,7 +13,7 @@ Orbit Radar is a React + TypeScript satellite tracker built with Vite, Tailwind 
 - One-second position updates with a compact, collapsible control panel that keeps the globe visible.
 - Telemetry panel with latitude, longitude, altitude, and speed.
 - Optional UTC-based day/night shading and a Live, Simulation, or Paused device-local clock.
-- Optional cached NASA GIBS daily cloud-fraction overlay; the latest available observation remains visible during time-lapse.
+- Optional cached NOAA GFS total-cloud-cover overlay; the latest global analysis remains visible during time-lapse.
 - Optional selected-satellite camera follow mode.
 - Browser geolocation marker for the current user when permission is granted.
 - Geometric horizon-crossing predictions that identify passes clipped by the 24-hour window.
@@ -41,7 +41,7 @@ Altitude filters are broad visualization bands: low below 2,000 km, medium from 
 
 The globe's night side uses the simulated instant, seasonal solar declination, and the equation of time. During time-lapse it follows simulation time; in live mode it follows the current instant. The compact clock formats that instant in the device's local time zone. This is a visual Earth-lighting model and does not simulate city lights or atmospheric scattering.
 
-Cloud cover is an optional cached daily `MODIS_Terra_Cloud_Fraction_Day` image from [NASA GIBS](https://nasa-gibs.github.io/gibs-api-docs/). The publisher converts NASA's thematic colour map into a white alpha texture before serving it, then downloads the latest available observation to GitHub Pages every six hours, trying recent observation dates when the current day's image is not ready. The current image and publisher state are available at `data/clouds/latest.png` and `data/cloud-status.json` on the `gh-pages` branch. It represents the latest available observation rather than a forecast, historical weather playback, or a three-dimensional cloud field. The globe remains usable if the weather cache is unavailable.
+Cloud cover is an optional cached NOAA [GFS](https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast) total-cloud-cover analysis. The publisher downloads the latest complete global `tcc` field from [NOMADS](https://nomads.ncep.noaa.gov/), converts it to a smooth white alpha texture, and publishes it to GitHub Pages every six hours, trying recent model cycles when the newest cycle is not ready. The current image and publisher state are available at `data/clouds/latest.png` and `data/cloud-status.json` on the `gh-pages` branch. It represents modelled cloud amount rather than direct satellite photography, precipitation, optical thickness, historical weather playback, or a three-dimensional cloud field. The globe remains usable if the weather cache is unavailable.
 
 ## Data source
 

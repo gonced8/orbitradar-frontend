@@ -24,8 +24,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Python weather publisher
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install weather publisher dependencies
+        run: python -m pip install -r requirements-weather.txt
+
       - name: Run tests
         run: npm run test
+
+      - name: Run weather publisher tests
+        run: python scripts/test_refresh_clouds.py
 
       - name: Run lint
         run: npm run lint

@@ -12,10 +12,11 @@ Orbit Radar is a React + TypeScript satellite tracker built with Vite, Tailwind 
 - Paginated catalog browser for selecting any loaded satellite without searching.
 - One-second position updates with a compact, collapsible control panel that keeps the globe visible.
 - Telemetry panel with latitude, longitude, altitude, and speed.
-- Optional UTC-based day/night shading and a Live, Simulation, or Paused UTC clock.
+- Optional UTC-based day/night shading and a Live, Simulation, or Paused device-local clock.
 - Optional cached NASA GIBS daily cloud-fraction overlay; the latest available observation remains visible during time-lapse.
 - Optional selected-satellite camera follow mode.
 - Browser geolocation marker for the current user when permission is granted.
+- Geometric horizon-crossing predictions that identify passes clipped by the 24-hour window.
 
 ## Getting started
 
@@ -36,7 +37,9 @@ npm run dev
 
 Satellite positions are propagated with SGP4 through [`satellite.js`](https://github.com/shashwatak/satellite.js), using the TLE or OMM epoch supplied by CelesTrak. The result is converted from ECI to geodetic latitude, longitude, and altitude with Greenwich sidereal time. The displayed orbital path is a ground track covering one orbital period centred on the selected time, so it includes both the recent past and the near future.
 
-The globe's night side uses the simulated UTC time, seasonal solar declination, and the equation of time. During time-lapse it follows simulation time; in live mode it follows the current UTC clock. This is a visual Earth-lighting model and does not simulate city lights or atmospheric scattering.
+Altitude filters are broad visualization bands: low below 2,000 km, medium from 2,000 to 20,000 km, and high above 20,000 km. The high band is not a claim that every object is geostationary. Pass predictions report geometric crossings of the observer's horizon; they do not account for terrain, buildings, sunlight, atmospheric extinction, or naked-eye brightness.
+
+The globe's night side uses the simulated instant, seasonal solar declination, and the equation of time. During time-lapse it follows simulation time; in live mode it follows the current instant. The compact clock formats that instant in the device's local time zone. This is a visual Earth-lighting model and does not simulate city lights or atmospheric scattering.
 
 Cloud cover is an optional cached daily `MODIS_Terra_Cloud_Fraction_Day` image from [NASA GIBS](https://nasa-gibs.github.io/gibs-api-docs/). The publisher converts NASA's thematic colour map into a white alpha texture before serving it, then downloads the latest available observation to GitHub Pages every six hours, trying recent observation dates when the current day's image is not ready. The current image and publisher state are available at `data/clouds/latest.png` and `data/cloud-status.json` on the `gh-pages` branch. It represents the latest available observation rather than a forecast, historical weather playback, or a three-dimensional cloud field. The globe remains usable if the weather cache is unavailable.
 

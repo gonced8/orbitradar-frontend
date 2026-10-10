@@ -55,28 +55,40 @@ const closestCloudFraction = (red, green, blue) => {
       closest = fraction;
     }
   }
-  return closest;
+  // WMS errors and map backgrounds can still arrive as valid PNG files.
+  // Ignore pixels that are not close to the documented thematic palette.
+  return distance <= 40 ** 2 ? closest : null;
 };
 
-export const renderCloudTexture = (input) => {
+export const renderCloudTexture = (input, validateDimensions = false) => {
   const source = PNG.sync.read(Buffer.from(input));
+  if (
+    validateDimensions &&
+    (source.width !== WIDTH || source.height !== HEIGHT)
+  )
+    throw new Error("Cloud image dimensions do not match the requested map.");
   const output = new PNG({ width: source.width, height: source.height });
+  let observedPixels = 0;
   for (let offset = 0; offset < source.data.length; offset += 4) {
     const sourceAlpha = source.data[offset + 3];
     const fraction =
       sourceAlpha === 0
-        ? 0
+        ? null
         : closestCloudFraction(
             source.data[offset],
             source.data[offset + 1],
             source.data[offset + 2],
           );
-    const alpha = Math.round(Math.pow(fraction / 100, 0.72) * 210);
+    if (fraction !== null) observedPixels += 1;
+    const alpha =
+      fraction === null ? 0 : Math.round(Math.pow(fraction / 100, 0.72) * 210);
     output.data[offset] = 255;
     output.data[offset + 1] = 255;
     output.data[offset + 2] = 255;
     output.data[offset + 3] = Math.min(alpha, sourceAlpha);
   }
+  if (observedPixels < source.width * source.height * 0.005)
+    throw new Error("Cloud image contains too little observed data.");
   return PNG.sync.write(output);
 };
 
@@ -127,6 +139,7 @@ export async function refreshCloudImage({
   siteDir = "site",
   now = new Date(),
   fetchImpl = fetch,
+  validateImageDimensions = true,
 } = {}) {
   const dataDir = path.join(siteDir, "data");
   const imageFile = path.join(dataDir, "clouds", "latest.png");
@@ -166,7 +179,7 @@ export async function refreshCloudImage({
 
       let rendered;
       try {
-        rendered = renderCloudTexture(body);
+        rendered = renderCloudTexture(body, validateImageDimensions);
       } catch {
         continue;
       }

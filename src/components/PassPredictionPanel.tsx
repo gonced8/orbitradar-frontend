@@ -134,7 +134,9 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                       <div className="rounded-lg bg-white/10 p-2 text-center">
                         <p className="text-slate-400">Rise</p>
                         <p className="font-semibold">
-                          {formatTime(pass.riseTime)}
+                          {pass.riseClipped
+                            ? "Already up"
+                            : formatTime(pass.riseTime)}
                         </p>
                       </div>
                       <div className="rounded-lg bg-white/10 p-2 text-center">
@@ -146,12 +148,17 @@ export const PassPredictionPanel: React.FC<PassPredictionPanelProps> = ({
                       <div className="rounded-lg bg-white/10 p-2 text-center">
                         <p className="text-slate-400">Set</p>
                         <p className="font-semibold">
-                          {formatTime(pass.setTime)}
+                          {pass.setClipped
+                            ? "After window"
+                            : formatTime(pass.setTime)}
                         </p>
                       </div>
                     </div>
                     <div className="mt-2 text-center text-xs text-slate-400">
-                      Duration: {formatDuration(pass.durationMinutes)}
+                      {pass.riseClipped || pass.setClipped
+                        ? "Visible during at least "
+                        : "Duration: "}
+                      {formatDuration(pass.durationMinutes)}
                     </div>
                   </div>
                 ))}

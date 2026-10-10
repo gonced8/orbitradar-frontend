@@ -33,7 +33,7 @@ const LocalClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
       : "Live local";
 
   return (
-    <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-lg border border-white/15 bg-slate-950/75 px-2.5 py-1.5 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
+    <div className="pointer-events-none absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 rounded-lg border border-white/15 bg-slate-950/75 px-2.5 py-1.5 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
       <div className="flex items-center gap-2">
         <p className="hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:block">
           {label}

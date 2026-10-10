@@ -9,6 +9,8 @@ export type SatellitePass = {
   setTime: Date;
   maxElevationDeg: number;
   durationMinutes: number;
+  riseClipped: boolean;
+  setClipped: boolean;
 };
 
 type SerializedPass = Omit<

@@ -2,6 +2,11 @@ import * as THREE from "three";
 
 /** Return the geocentric direction of the Sun in the globe's coordinates. */
 export const getSunDirection = (time: Date): THREE.Vector3 => {
+  const year = time.getUTCFullYear();
+  const daysInYear =
+    Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1) === 366 * 86400000
+      ? 366
+      : 365;
   const dayOfYear = Math.floor(
     (Date.UTC(time.getUTCFullYear(), time.getUTCMonth(), time.getUTCDate()) -
       Date.UTC(time.getUTCFullYear(), 0, 0)) /
@@ -10,7 +15,7 @@ export const getSunDirection = (time: Date): THREE.Vector3 => {
   const minutes =
     time.getUTCHours() * 60 + time.getUTCMinutes() + time.getUTCSeconds() / 60;
   const gamma =
-    (2 * Math.PI * (dayOfYear - 1 + (minutes / 60 - 12) / 24)) / 365;
+    (2 * Math.PI * (dayOfYear - 1 + (minutes / 60 - 12) / 24)) / daysInYear;
   const declination =
     0.006918 -
     0.399912 * Math.cos(gamma) +

@@ -182,22 +182,50 @@ gl_Position = projectionMatrix * mvPosition;`,
         return;
       }
       const rect = canvas.getBoundingClientRect();
-      const pointer = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      const progress = interpolationProgress(
+        interpolationStartedAtRef.current,
+        interpolationDurationRef.current,
       );
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(pointer, globe.camera());
-      const hit = raycaster.intersectObject(mesh)[0];
-      if (hit?.instanceId === undefined) return;
-      const earthHit = raycaster.ray.intersectSphere(
-        new THREE.Sphere(new THREE.Vector3(), globe.getGlobeRadius()),
+      const camera = globe.camera();
+      const earth = new THREE.Sphere(
         new THREE.Vector3(),
+        globe.getGlobeRadius(),
       );
-      if (earthHit && earthHit.distanceTo(raycaster.ray.origin) < hit.distance)
-        return;
-      const position = latestRef.current.positions[hit.instanceId];
-      if (position) latestRef.current.onSelect(position.noradId);
+      const projected = new THREE.Vector3();
+      let closest: { noradId: number; distance: number } | null = null;
+      for (const position of latestRef.current.positions) {
+        const motion = markerMotionRef.current.get(position.noradId);
+        if (!motion) continue;
+        const worldPosition = interpolateAroundGlobe(
+          motion.start,
+          motion.target,
+          progress,
+        );
+        projected.copy(worldPosition).project(camera);
+        if (projected.z < -1 || projected.z > 1) continue;
+        const screenX = rect.left + ((projected.x + 1) / 2) * rect.width;
+        const screenY = rect.top + ((1 - projected.y) / 2) * rect.height;
+        const distance = Math.hypot(
+          event.clientX - screenX,
+          event.clientY - screenY,
+        );
+        // A generous target makes the tiny visual markers usable on touch screens.
+        if (distance > 14 || (closest && distance >= closest.distance))
+          continue;
+        const ray = new THREE.Ray(
+          camera.position,
+          worldPosition.clone().sub(camera.position).normalize(),
+        );
+        const earthHit = ray.intersectSphere(earth, new THREE.Vector3());
+        if (
+          earthHit &&
+          earthHit.distanceTo(camera.position) <
+            worldPosition.distanceTo(camera.position) - 0.001
+        )
+          continue;
+        closest = { noradId: position.noradId, distance };
+      }
+      if (closest) latestRef.current.onSelect(closest.noradId);
     };
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);

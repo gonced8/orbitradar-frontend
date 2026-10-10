@@ -191,7 +191,7 @@ const World: React.FC = () => {
         lng: selectedPosition.lng,
         altitude: Math.max(2.1, selectedPosition.alt * 0.75 + 1.5),
       },
-      1000,
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 120,
     );
   }, [followSelected, selectedPosition]);
 
@@ -330,7 +330,7 @@ const World: React.FC = () => {
     <div className="relative h-full w-full overflow-hidden bg-black sm:flex">
       <div
         ref={globeContainerRef}
-        className="absolute inset-0 z-0 sm:left-[22.5rem]"
+        className={`absolute inset-0 z-0 ${showControls ? "sm:left-[22.5rem]" : "sm:left-0"}`}
       >
         {globeContextLost ? (
           <div
@@ -420,7 +420,7 @@ const World: React.FC = () => {
                   pathColor={(path: object) =>
                     `${(path as { color?: string }).color ?? "#67e8f9"}e6`
                   }
-                  pathStroke={0.9}
+                  pathStroke={1.2}
                   pathTransitionDuration={0}
                 />
               )}
@@ -462,7 +462,7 @@ const World: React.FC = () => {
         !showTimeLapseControls &&
         !showPassPrediction &&
         !showSettings && (
-          <section className="absolute bottom-3 left-3 right-3 z-20 rounded-2xl border border-white/15 bg-slate-950/90 p-4 text-left text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-[23rem] sm:right-auto sm:w-96">
+          <section className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 right-3 z-20 rounded-2xl border border-white/15 bg-slate-950/90 p-4 text-left text-white shadow-2xl backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-auto sm:w-96">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
@@ -537,7 +537,7 @@ const World: React.FC = () => {
 
       {/* Control Panel */}
       {showControls && (
-        <aside className="absolute bottom-0 left-0 right-0 z-30 h-[42dvh] max-h-[28rem] overflow-y-auto rounded-t-2xl border border-white/15 bg-slate-950/95 p-4 pb-8 text-left text-white shadow-2xl backdrop-blur-xl sm:relative sm:h-full sm:max-h-full sm:w-[22.5rem] sm:shrink-0 sm:rounded-none sm:border-b-0 sm:border-l-0 sm:border-t-0 sm:border-r sm:pb-4">
+        <aside className="absolute bottom-0 left-0 right-0 z-30 h-[42dvh] max-h-[28rem] overflow-y-auto rounded-t-2xl border border-white/15 bg-slate-950/95 p-4 pb-[max(2rem,env(safe-area-inset-bottom))] text-left text-white shadow-2xl backdrop-blur-xl sm:relative sm:h-full sm:max-h-full sm:w-[22.5rem] sm:shrink-0 sm:rounded-none sm:border-b-0 sm:border-l-0 sm:border-t-0 sm:border-r sm:pb-4">
           <div
             aria-hidden="true"
             className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/25 sm:hidden"

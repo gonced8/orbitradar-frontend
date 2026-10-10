@@ -154,7 +154,7 @@ const FEATURED_COLORS = new Map<number, string>([
 export const ALTITUDE_COLORS = {
   leo: "#c084fc", // < 2000 km (Violet)
   meo: "#ffc857", // < 20000 km (Amber)
-  geo: "#ff70c8", // >= 20000 km (Pink)
+  geo: "#ff70c8", // >= 20000 km high Earth orbit band (Pink)
 } as const;
 
 export const getSatelliteColor = (
@@ -254,7 +254,7 @@ export const ALTITUDE_FILTERS = {
   all: { label: "All", value: "all" },
   leo: { label: "LEO (< 2000 km)", value: "leo" },
   meo: { label: "MEO (2-20k km)", value: "meo" },
-  geo: { label: "GEO (20k+ km)", value: "geo" },
+  geo: { label: "High (20k+ km)", value: "geo" },
   none: { label: "None", value: "none" },
 } as const;
 

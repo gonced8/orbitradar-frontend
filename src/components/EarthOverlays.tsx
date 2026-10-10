@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { getSunDirection } from "../utils/solar";
@@ -10,20 +10,17 @@ type Props = {
   cloudsEnabled: boolean;
 };
 
-const cloudImageUrl = (time: Date) => {
-  const date = time.toISOString().slice(0, 10);
+const cloudImageUrl = () => {
   const configured = import.meta.env.VITE_CLOUD_IMAGE_URL as string | undefined;
-  if (configured) return configured.replace("{date}", date);
-  if (!import.meta.env.DEV) return "/data/clouds/latest.png";
-  return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_Cloud_Fraction_Day&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:4326&WIDTH=1024&HEIGHT=512&BBOX=-180,-90,180,90&TIME=${date}`;
+  return configured ?? `${import.meta.env.BASE_URL}data/clouds/latest.png`;
 };
 
 // react-globe.gl rotates its textured globe to align the prime meridian with
 // its coordinate system. Overlay spheres must use the same rotation for their
 // equirectangular textures and lighting to line up with the Earth image.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const NIGHT_RADIUS_SCALE = 1.002;
 const CLOUD_RADIUS_SCALE = 1.008;
+const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()
@@ -35,56 +32,119 @@ export const EarthOverlays = ({
   nightEnabled,
   cloudsEnabled,
 }: Props) => {
-  const nightRef = useRef<THREE.Mesh | null>(null);
+  const nightUniformsRef = useRef({
+    sunDirection: { value: new THREE.Vector3() },
+    enabled: { value: 1 },
+  });
   const cloudRef = useRef<THREE.Mesh | null>(null);
+  const [cloudVersion, setCloudVersion] = useState("");
   const timeMs = time.getTime();
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
-  const cloudUrl = useMemo(() => cloudImageUrl(new Date()), []);
+  const cloudUrl = useMemo(() => {
+    const url = cloudImageUrl();
+    if (!cloudVersion) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cloudVersion)}`;
+  }, [cloudVersion]);
   const sunRef = useRef(sun);
   const nightEnabledRef = useRef(nightEnabled);
   sunRef.current = sun;
   nightEnabledRef.current = nightEnabled;
 
   useEffect(() => {
-    if (!globe) return;
-    const radius = globe.getGlobeRadius();
-    const geometry = new THREE.SphereGeometry(
-      radius * NIGHT_RADIUS_SCALE,
-      64,
-      32,
-    );
-    const material = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: {
-        sunDirection: { value: toOverlayDirection(sunRef.current) },
-        opacity: { value: 0.72 },
-      },
-      side: THREE.FrontSide,
-      depthTest: true,
-      vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform vec3 sunDirection; uniform float opacity; varying vec3 vNormal; void main() { float daylight = dot(normalize(vNormal), normalize(sunDirection)); float day = smoothstep(-0.22, 0.12, daylight); float night = 1.0 - day; gl_FragColor = vec4(0.005, 0.012, 0.04, night * opacity); }`,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.y = GLOBE_TEXTURE_ROTATION_Y;
-    mesh.name = "orbitradar-night-side";
-    mesh.visible = nightEnabledRef.current;
-    globe.scene().add(mesh);
-    nightRef.current = mesh;
+    if (!cloudsEnabled || import.meta.env.VITE_CLOUD_IMAGE_URL) return;
+    let cancelled = false;
+    const refreshVersion = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.BASE_URL}data/cloud-status.json`,
+          { cache: "no-cache" },
+        );
+        if (!response.ok) return;
+        const status = (await response.json()) as {
+          state?: string;
+          fetchedAt?: string;
+        };
+        if (!cancelled && status.state === "ready" && status.fetchedAt)
+          setCloudVersion(status.fetchedAt);
+      } catch {
+        // Retain the current texture while the publisher status is unavailable.
+      }
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) void refreshVersion();
+    };
+    void refreshVersion();
+    const timer = window.setInterval(refreshVersion, CLOUD_STATUS_REFRESH_MS);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      globe.scene().remove(mesh);
-      geometry.dispose();
-      material.dispose();
-      if (nightRef.current === mesh) nightRef.current = null;
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [cloudsEnabled]);
+
+  useEffect(() => {
+    if (!globe) return;
+    const globeMeshes: THREE.Mesh[] = [];
+    globe.scene().traverse((object) => {
+      if (
+        globeMeshes.length === 0 &&
+        object instanceof THREE.Mesh &&
+        (object as THREE.Mesh & { __globeObjType?: string }).__globeObjType ===
+          "globe"
+      )
+        globeMeshes.push(object);
+    });
+    const globeMesh = globeMeshes[0];
+    if (!globeMesh) return;
+    const material = globeMesh.material;
+    if (!(material instanceof THREE.MeshPhongMaterial)) return;
+    const previousCompile = material.onBeforeCompile;
+    const previousCacheKey = material.customProgramCacheKey;
+    const uniforms = nightUniformsRef.current;
+    uniforms.sunDirection.value.copy(toOverlayDirection(sunRef.current));
+    uniforms.enabled.value = nightEnabledRef.current ? 1 : 0;
+    material.onBeforeCompile = (shader, renderer) => {
+      previousCompile.call(material, shader, renderer);
+      shader.uniforms.orbitradarSunDirection = uniforms.sunDirection;
+      shader.uniforms.orbitradarNightEnabled = uniforms.enabled;
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;",
+        )
+        .replace(
+          "#include <beginnormal_vertex>",
+          "#include <beginnormal_vertex>\norbitradarSurfaceNormal = normalize(objectNormal);",
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;",
+        )
+        .replace(
+          "#include <opaque_fragment>",
+          `float orbitradarDaylight = dot(normalize(orbitradarSurfaceNormal), normalize(orbitradarSunDirection));
+float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
+vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
+outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
+#include <opaque_fragment>`,
+        );
+    };
+    material.customProgramCacheKey = () =>
+      `${previousCacheKey.call(material)}-orbitradar-night-surface-v1`;
+    material.needsUpdate = true;
+    return () => {
+      material.onBeforeCompile = previousCompile;
+      material.customProgramCacheKey = previousCacheKey;
+      material.needsUpdate = true;
     };
   }, [globe]);
 
   useEffect(() => {
-    const mesh = nightRef.current;
-    if (!mesh) return;
-    mesh.visible = nightEnabled;
-    const material = mesh.material as THREE.ShaderMaterial;
-    material.uniforms.sunDirection.value.copy(toOverlayDirection(sun));
+    const uniforms = nightUniformsRef.current;
+    uniforms.enabled.value = nightEnabled ? 1 : 0;
+    uniforms.sunDirection.value.copy(toOverlayDirection(sun));
   }, [nightEnabled, sun]);
 
   useEffect(() => {

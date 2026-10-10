@@ -118,7 +118,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <option value="all">All Satellites</option>
                 <option value="leo">LEO (&lt;2000km)</option>
                 <option value="meo">MEO (2-20k km)</option>
-                <option value="geo">GEO (20k+ km)</option>
+                <option value="geo">High altitude (20k+ km)</option>
                 <option value="none">None (Earth only)</option>
               </select>
             </div>

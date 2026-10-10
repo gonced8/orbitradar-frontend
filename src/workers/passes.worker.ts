@@ -58,6 +58,7 @@ const calculate = async (request: Request, activeId: number) => {
       let previousTime = start.getTime();
       let previousElevation = elevationAt(previousTime);
       let riseTime = previousElevation >= 0 ? previousTime : null;
+      let riseClipped = previousElevation >= 0;
       let peakTime = previousTime;
       let peakElevation = previousElevation;
       let stepsSinceYield = 0;
@@ -80,6 +81,7 @@ const calculate = async (request: Request, activeId: number) => {
             else low = mid;
           }
           riseTime = high;
+          riseClipped = false;
           peakTime = high;
           peakElevation = elevationAt(high);
         }
@@ -122,8 +124,11 @@ const calculate = async (request: Request, activeId: number) => {
             setTime,
             maxElevationDeg: (peakElevation * 180) / Math.PI,
             durationMinutes: (setTime - riseTime) / 60_000,
+            riseClipped,
+            setClipped: false,
           });
           riseTime = null;
+          riseClipped = false;
         }
         previousTime = currentTime;
         previousElevation = currentElevation;
@@ -142,6 +147,8 @@ const calculate = async (request: Request, activeId: number) => {
           setTime: end.getTime(),
           maxElevationDeg: (peakElevation * 180) / Math.PI,
           durationMinutes: (end.getTime() - riseTime) / 60_000,
+          riseClipped,
+          setClipped: true,
         });
       }
     }

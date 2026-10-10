@@ -63,6 +63,7 @@ describe("shared weather publisher", () => {
     const result = await refreshCloudImage({
       siteDir,
       now,
+      validateImageDimensions: false,
       fetchImpl: async (url) => {
         requested.push(url);
         return requested.length === 1 ? response(404) : response(200);

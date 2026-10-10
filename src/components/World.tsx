@@ -30,7 +30,7 @@ import SettingsPanel from "./SettingsPanel";
 import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
 import EarthOverlays from "./EarthOverlays";
 import { listenForWebglContextLoss } from "../utils/globeContext";
-import UtcClock from "./UtcClock";
+import LocalClock from "./LocalClock";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -450,7 +450,7 @@ const World: React.FC = () => {
         )}
       </div>
 
-      <UtcClock
+      <LocalClock
         isPaused={isPaused}
         isTimeLapseActive={isTimeLapseActive}
         getTime={timeLapse.getEffectiveTime}

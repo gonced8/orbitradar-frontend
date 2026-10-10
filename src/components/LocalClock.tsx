@@ -6,7 +6,7 @@ type Props = {
   getTime: () => Date;
 };
 
-const UtcClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
+const LocalClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
   const [time, setTime] = useState(() => getTime());
   const getTimeRef = useRef(getTime);
   getTimeRef.current = getTime;
@@ -27,10 +27,10 @@ const UtcClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
     ? `.${Math.floor(time.getUTCMilliseconds() / 100)}`
     : "";
   const label = isPaused
-    ? "Paused UTC"
+    ? "Paused local"
     : isTimeLapseActive
-      ? "Simulation UTC"
-      : "Live UTC";
+      ? "Simulation local"
+      : "Live local";
 
   return (
     <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-lg border border-white/15 bg-slate-950/75 px-2.5 py-1.5 text-right text-white shadow-lg backdrop-blur-md sm:right-5 sm:top-5">
@@ -44,14 +44,12 @@ const UtcClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
         >
           <span className="sm:hidden">
             {time.toLocaleTimeString(undefined, {
-              timeZone: "UTC",
               timeStyle: "medium",
             })}
             {fraction}
           </span>
           <span className="hidden sm:inline">
             {time.toLocaleString(undefined, {
-              timeZone: "UTC",
               dateStyle: "short",
               timeStyle: "medium",
             })}
@@ -63,4 +61,4 @@ const UtcClock = ({ isPaused, isTimeLapseActive, getTime }: Props) => {
   );
 };
 
-export default UtcClock;
+export default LocalClock;

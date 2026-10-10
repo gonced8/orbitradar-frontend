@@ -36,7 +36,8 @@ const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
 // Keep this as a six-digit colour: react-globe.gl uses different colour
 // parsers for thin and fat paths, and eight-digit hex alpha is not handled
-// consistently by both paths.
+// consistently by both paths. The prop below uses a function because a string
+// accessor is interpreted as a property name by react-globe.gl.
 const SELECTED_ORBIT_COLOR = "#ffd166";
 const SELECTED_ORBIT_STROKE = 1.8;
 const Globe = lazy(() => import("react-globe.gl"));
@@ -421,7 +422,7 @@ const World: React.FC = () => {
                   pathPointLat="lat"
                   pathPointLng="lng"
                   pathPointAlt="alt"
-                  pathColor={SELECTED_ORBIT_COLOR}
+                  pathColor={() => SELECTED_ORBIT_COLOR}
                   pathStroke={SELECTED_ORBIT_STROKE}
                   pathTransitionDuration={0}
                 />

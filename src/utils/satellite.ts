@@ -144,17 +144,17 @@ export type LocationPoint = { lat: number; lng: number; name: string };
 
 // Featured satellite colors
 const FEATURED_COLORS = new Map<number, string>([
-  [25544, "#ff4d4f"], // ISS
-  [20580, "#7dd3fc"], // Hubble
-  [25994, "#34d399"], // Terra
-  [33591, "#fbbf24"], // NOAA 19
+  [25544, "#ff643d"], // ISS
+  [20580, "#00f0ff"], // Hubble
+  [25994, "#7cff4f"], // Terra
+  [33591, "#ffd400"], // NOAA 19
 ]);
 
 // Altitude-based colors
 export const ALTITUDE_COLORS = {
-  leo: "#67e8f9", // < 2000 km (Cyan)
-  meo: "#a78bfa", // < 20000 km (Purple)
-  geo: "#f9a8d4", // >= 20000 km (Pink)
+  leo: "#00f0ff", // < 2000 km (Cyan)
+  meo: "#ffd400", // < 20000 km (Yellow)
+  geo: "#ff4fdb", // >= 20000 km (Magenta)
 } as const;
 
 export const getSatelliteColor = (

@@ -32,7 +32,7 @@ describe("SatelliteMarkers", () => {
         alt: 0.05,
         altitudeKm: 400,
         velocityKph: 27_000,
-        color: "#67e8f9",
+        color: "#00f0ff",
         altitudeClass: "leo",
       }),
     );
@@ -66,7 +66,7 @@ describe("SatelliteMarkers", () => {
     expect(selectedColor.getHex()).toBe(0xffffff);
     const catalogColor = new THREE.Color();
     currentMesh.getColorAt(1, catalogColor);
-    expect(catalogColor.getHex()).toBe(0x67e8f9);
+    expect(catalogColor.getHex()).toBe(0x00f0ff);
 
     const targetPositions = currentMesh.geometry.getAttribute(
       "instanceTargetPosition",

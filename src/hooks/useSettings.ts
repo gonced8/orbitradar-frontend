@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoRefresh: true,
   refreshIntervalHours: 8,
   nightShading: true,
-  cloudCover: false,
+  cloudCover: true,
 };
 
 export const useSettings = () => {

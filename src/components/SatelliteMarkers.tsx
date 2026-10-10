@@ -16,6 +16,7 @@ import {
 type Props = {
   globe: GlobeMethods | null;
   positions: SatellitePosition[];
+  snapshotVersion?: number;
   selectedNoradId: number;
   trackedNoradIds: number[];
   getTrackedColor: (noradId: number) => string;
@@ -51,6 +52,7 @@ const interpolateAroundGlobe = (
 const SatelliteMarkers = ({
   globe,
   positions,
+  snapshotVersion = 0,
   selectedNoradId,
   trackedNoradIds,
   getTrackedColor,
@@ -65,7 +67,8 @@ const SatelliteMarkers = ({
   const lastSnapshotAtRef = useRef<number | null>(null);
   const interpolationUniformRef = useRef({ value: 1 });
   const markerMotionRef = useRef(new Map<number, MarkerMotion>());
-  const positionsRef = useRef(positions);
+  const snapshotVersionRef = useRef(snapshotVersion);
+  const hasRenderedSnapshotRef = useRef(false);
   const latestRef = useRef({ positions, onSelect });
   const trackedIds = useMemo(() => new Set(trackedNoradIds), [trackedNoradIds]);
   latestRef.current = { positions, onSelect };
@@ -226,7 +229,8 @@ gl_Position = projectionMatrix * mvPosition;`,
     ) as THREE.InstancedBufferAttribute;
     const now = performance.now();
     const isNewSnapshot =
-      positions !== positionsRef.current || markerMotionRef.current.size === 0;
+      snapshotVersion !== snapshotVersionRef.current ||
+      !hasRenderedSnapshotRef.current;
     const oldProgress = interpolationProgress(
       interpolationStartedAtRef.current,
       interpolationDurationRef.current,
@@ -288,7 +292,8 @@ gl_Position = projectionMatrix * mvPosition;`,
           snapshotIntervalRef.current,
         );
       }
-      positionsRef.current = positions;
+      snapshotVersionRef.current = snapshotVersion;
+      hasRenderedSnapshotRef.current = true;
       lastSnapshotAtRef.current = now;
       interpolationStartedAtRef.current = now;
       interpolationUniformRef.current.value = 0;
@@ -300,6 +305,7 @@ gl_Position = projectionMatrix * mvPosition;`,
   }, [
     globe,
     positions,
+    snapshotVersion,
     selectedNoradId,
     trackedIds,
     getTrackedColor,

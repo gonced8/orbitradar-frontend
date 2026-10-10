@@ -158,7 +158,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </button>
               </label>
               <p className="mt-1 text-xs text-slate-500">
-                NASA daily cloud fraction, latest observation.
+                Shared NASA daily cloud fraction, latest cached observation.
               </p>
             </div>
 

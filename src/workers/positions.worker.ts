@@ -13,6 +13,7 @@ type Request = {
   selectedNoradId?: number;
   satellites?: SatelliteTle[];
   showOrbit?: boolean;
+  snapshotKey?: string;
 };
 
 let tracked: NonNullable<ReturnType<typeof buildTrackedSatellite>>[] = [];
@@ -40,7 +41,12 @@ self.onmessage = (event: MessageEvent<Request>) => {
       setTimeout(propagateBatch, 0);
       return;
     }
-    self.postMessage({ type: "positions", requestId, positions });
+    self.postMessage({
+      type: "positions",
+      requestId,
+      positions,
+      snapshotKey: request.snapshotKey,
+    });
   };
   if (requestId === undefined) return;
   latestRequestId = requestId;

@@ -152,8 +152,8 @@ const FEATURED_COLORS = new Map<number, string>([
 
 // Altitude-based colors
 export const ALTITUDE_COLORS = {
-  leo: "#ff3b30", // < 2000 km (Red)
-  meo: "#ffd400", // < 20000 km (Yellow)
+  leo: "#c084fc", // < 2000 km (Violet)
+  meo: "#ffd166", // < 20000 km (Gold)
   geo: "#ff4fdb", // >= 20000 km (Magenta)
 } as const;
 

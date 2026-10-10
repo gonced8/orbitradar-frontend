@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   OrbitPoint,
   SatellitePosition,
@@ -18,12 +18,15 @@ export const useSatellitePositions = (
   const [satellitePositions, setSatellitePositions] = useState<
     SatellitePosition[]
   >([]);
+  const [snapshotVersion, setSnapshotVersion] = useState(0);
   const [orbitPoints, setOrbitPoints] = useState<OrbitPoint[]>([]);
   const [showOrbit, setShowOrbit] = useState(true);
   const [followSelected, setFollowSelected] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const orbitSelectionRef = useRef(selectedNoradId);
+  const catalogVersionRef = useRef(0);
+  const snapshotKeyRef = useRef<string | null>(null);
   const usesExternalTime = externalTime !== undefined;
   const effectiveTime = externalTime ?? liveTime;
   const catalogTles = useMemo(() => trackedSatellites, [trackedSatellites]);
@@ -39,6 +42,16 @@ export const useSatellitePositions = (
     time: effectiveTime,
     showOrbit,
   };
+
+  const acceptPositionSnapshot = useCallback(
+    (positions: SatellitePosition[], snapshotKey: string) => {
+      setSatellitePositions(positions);
+      if (snapshotKeyRef.current === snapshotKey) return;
+      snapshotKeyRef.current = snapshotKey;
+      setSnapshotVersion((version) => version + 1);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (usesExternalTime) return;
@@ -70,11 +83,15 @@ export const useSatellitePositions = (
         requestId: number;
         positions?: SatellitePosition[];
         orbitPoints?: OrbitPoint[];
+        snapshotKey?: string;
       }>,
     ) => {
       if (event.data.requestId !== requestIdRef.current) return;
       if (event.data.type === "positions" && event.data.positions) {
-        setSatellitePositions(event.data.positions);
+        acceptPositionSnapshot(
+          event.data.positions,
+          event.data.snapshotKey ?? `request:${event.data.requestId}`,
+        );
       } else if (event.data.type === "orbit" && event.data.orbitPoints) {
         setOrbitPoints(event.data.orbitPoints);
       }
@@ -87,15 +104,15 @@ export const useSatellitePositions = (
         time: at,
         showOrbit: orbitVisible,
       } = latestRef.current;
-      setSatellitePositions(
-        current
-          .map((sat) => {
-            const tracked = buildTrackedSatellite(sat);
-            return tracked ? propagatePosition(tracked, at) : null;
-          })
-          .filter(
-            (position): position is SatellitePosition => position !== null,
-          ),
+      const positions = current
+        .map((sat) => {
+          const tracked = buildTrackedSatellite(sat);
+          return tracked ? propagatePosition(tracked, at) : null;
+        })
+        .filter((position): position is SatellitePosition => position !== null);
+      acceptPositionSnapshot(
+        positions,
+        `${catalogVersionRef.current}:${at.toISOString()}`,
       );
       const entry = current.find((sat) => sat.noradId === selectedId);
       const selected = entry ? buildTrackedSatellite(entry) : null;
@@ -107,9 +124,10 @@ export const useSatellitePositions = (
       worker.terminate();
       workerRef.current = null;
     };
-  }, []);
+  }, [acceptPositionSnapshot]);
 
   useEffect(() => {
+    catalogVersionRef.current += 1;
     workerRef.current?.postMessage({
       type: "catalog",
       satellites: catalogTles,
@@ -123,12 +141,14 @@ export const useSatellitePositions = (
       orbitSelectionRef.current = selectedNoradId;
     }
     const worker = workerRef.current;
+    const snapshotKey = `${catalogVersionRef.current}:${effectiveTime.toISOString()}`;
     if (worker) {
       worker.postMessage({
         requestId,
         time: effectiveTime.toISOString(),
         selectedNoradId,
         showOrbit,
+        snapshotKey,
       });
       return;
     }
@@ -142,7 +162,7 @@ export const useSatellitePositions = (
       (sat) => sat.noradId === selectedNoradId,
     );
     const selected = entry ? buildTrackedSatellite(entry) : null;
-    setSatellitePositions(positions);
+    acceptPositionSnapshot(positions, snapshotKey);
     setOrbitPoints(
       selected && showOrbit ? propagateOrbit(selected, effectiveTime) : [],
     );
@@ -152,6 +172,7 @@ export const useSatellitePositions = (
     selectedNoradId,
     showOrbit,
     catalogTles,
+    acceptPositionSnapshot,
   ]);
 
   const selectedPosition = useMemo(
@@ -165,6 +186,7 @@ export const useSatellitePositions = (
     time: liveTime,
     satellitePositions,
     selectedPosition,
+    snapshotVersion,
     orbitPoints: showOrbit ? orbitPoints : [],
     showOrbit,
     setShowOrbit,

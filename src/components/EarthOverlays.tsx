@@ -14,7 +14,8 @@ const cloudImageUrl = (time: Date) => {
   const date = time.toISOString().slice(0, 10);
   const configured = import.meta.env.VITE_CLOUD_IMAGE_URL as string | undefined;
   if (configured) return configured.replace("{date}", date);
-  return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_Cloud_Fraction_Day&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:4326&WIDTH=2048&HEIGHT=1024&BBOX=-180,-90,180,90&TIME=${date}`;
+  if (!import.meta.env.DEV) return "/data/clouds/latest.png";
+  return `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=MODIS_Terra_Cloud_Fraction_Day&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:4326&WIDTH=1024&HEIGHT=512&BBOX=-180,-90,180,90&TIME=${date}`;
 };
 
 export const EarthOverlays = ({
@@ -44,8 +45,10 @@ export const EarthOverlays = ({
         sunDirection: { value: sunRef.current.clone() },
         opacity: { value: 0.72 },
       },
+      side: THREE.FrontSide,
+      depthTest: false,
       vertexShader: `varying vec3 vNormal; void main() { vNormal = normalize(normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform vec3 sunDirection; uniform float opacity; varying vec3 vNormal; void main() { float daylight = dot(normalize(vNormal), normalize(sunDirection)); float night = smoothstep(0.12, -0.22, daylight); gl_FragColor = vec4(0.005, 0.012, 0.04, night * opacity); }`,
+      fragmentShader: `uniform vec3 sunDirection; uniform float opacity; varying vec3 vNormal; void main() { float daylight = dot(normalize(vNormal), normalize(sunDirection)); float day = smoothstep(-0.22, 0.12, daylight); float night = 1.0 - day; gl_FragColor = vec4(0.005, 0.012, 0.04, night * opacity); }`,
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = "orbitradar-night-side";
@@ -71,8 +74,11 @@ export const EarthOverlays = ({
   useEffect(() => {
     if (!globe || !cloudsEnabled) {
       if (cloudRef.current && globe) globe.scene().remove(cloudRef.current);
+      const material = cloudRef.current?.material as
+        THREE.MeshBasicMaterial | undefined;
+      material?.map?.dispose();
       cloudRef.current?.geometry.dispose();
-      (cloudRef.current?.material as THREE.Material | undefined)?.dispose();
+      material?.dispose();
       cloudRef.current = null;
       return;
     }
@@ -86,12 +92,21 @@ export const EarthOverlays = ({
           texture.dispose();
           return;
         }
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(globe.getGlobeRadius() * 1.008, 64, 32),
           new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
             opacity: 0.58,
+            alphaTest: 0.05,
+            depthTest: false,
             depthWrite: false,
             side: THREE.FrontSide,
           }),
@@ -108,8 +123,11 @@ export const EarthOverlays = ({
     return () => {
       cancelled = true;
       if (cloudRef.current && globe) globe.scene().remove(cloudRef.current);
+      const material = cloudRef.current?.material as
+        THREE.MeshBasicMaterial | undefined;
+      material?.map?.dispose();
       cloudRef.current?.geometry.dispose();
-      (cloudRef.current?.material as THREE.Material | undefined)?.dispose();
+      material?.dispose();
       cloudRef.current = null;
     };
   }, [globe, cloudsEnabled, cloudUrl]);

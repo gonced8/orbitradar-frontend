@@ -29,6 +29,7 @@ import PassPredictionPanel from "./PassPredictionPanel";
 import SettingsPanel from "./SettingsPanel";
 import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
 import EarthOverlays from "./EarthOverlays";
+import { listenForWebglContextLoss } from "../utils/globeContext";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -67,14 +68,10 @@ const World: React.FC = () => {
   useEffect(() => {
     const canvas = globeContainerRef.current?.querySelector("canvas");
     if (!canvas) return;
-    const handleContextLost = (event: Event) => {
-      event.preventDefault();
+    return listenForWebglContextLoss(canvas, () => {
       setGlobeContextLost(true);
       setGlobeReady(false);
-    };
-    canvas.addEventListener("webglcontextlost", handleContextLost);
-    return () =>
-      canvas.removeEventListener("webglcontextlost", handleContextLost);
+    });
   }, [globeReady, globeRetryKey]);
 
   useEffect(() => {
@@ -106,6 +103,7 @@ const World: React.FC = () => {
     satellitePositions,
     selectedPosition,
     orbitPoints,
+    snapshotVersion,
     showOrbit,
     setShowOrbit,
     followSelected,
@@ -412,6 +410,7 @@ const World: React.FC = () => {
                   <SatelliteMarkers
                     globe={globeEl.current ?? null}
                     positions={visiblePositions}
+                    snapshotVersion={snapshotVersion}
                     selectedNoradId={selectedNoradId}
                     trackedNoradIds={trackedNoradIds}
                     getTrackedColor={getTrackedColor}
@@ -444,7 +443,7 @@ const World: React.FC = () => {
         </time>
         {settings.cloudCover && (
           <p className="mt-0.5 text-[10px] text-slate-400">
-            Clouds: NASA daily fraction · latest available observation
+            Clouds: shared NASA daily fraction · latest cached observation
           </p>
         )}
       </div>

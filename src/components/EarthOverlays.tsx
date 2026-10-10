@@ -16,10 +16,9 @@ const cloudImageUrl = () => {
 };
 
 // react-globe.gl rotates its textured globe to align the prime meridian with
-// its coordinate system. Overlay spheres must use the same rotation for their
-// equirectangular textures and lighting to line up with the Earth image.
+// its coordinate system. Keep the same rotation when transforming the sun
+// direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_RADIUS_SCALE = 1.008;
 const CLOUD_OPACITY = 0.58;
 const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
@@ -33,15 +32,26 @@ export const EarthOverlays = ({
   nightEnabled,
   cloudsEnabled,
 }: Props) => {
+  const emptyCloudTexture = useMemo(() => {
+    const texture = new THREE.DataTexture(
+      new Uint8Array([255, 255, 255, 0]),
+      1,
+      1,
+      THREE.RGBAFormat,
+    );
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
   const nightUniformsRef = useRef({
     sunDirection: { value: new THREE.Vector3() },
     enabled: { value: 1 },
   });
   const cloudUniformsRef = useRef({
-    sunDirection: { value: new THREE.Vector3() },
-    enabled: { value: 1 },
+    map: { value: emptyCloudTexture as THREE.Texture },
+    enabled: { value: 0 },
+    opacity: { value: CLOUD_OPACITY },
   });
-  const cloudRef = useRef<THREE.Mesh | null>(null);
+  const cloudTextureRef = useRef<THREE.Texture | null>(null);
   const [cloudVersion, setCloudVersion] = useState("");
   const [cloudAvailable, setCloudAvailable] = useState(
     Boolean(import.meta.env.VITE_CLOUD_IMAGE_URL),
@@ -116,12 +126,16 @@ export const EarthOverlays = ({
     const previousCompile = material.onBeforeCompile;
     const previousCacheKey = material.customProgramCacheKey;
     const uniforms = nightUniformsRef.current;
+    const cloudUniforms = cloudUniformsRef.current;
     uniforms.sunDirection.value.copy(toOverlayDirection(sunRef.current));
     uniforms.enabled.value = nightEnabledRef.current ? 1 : 0;
     material.onBeforeCompile = (shader, renderer) => {
       previousCompile.call(material, shader, renderer);
       shader.uniforms.orbitradarSunDirection = uniforms.sunDirection;
       shader.uniforms.orbitradarNightEnabled = uniforms.enabled;
+      shader.uniforms.orbitradarCloudMap = cloudUniforms.map;
+      shader.uniforms.orbitradarCloudEnabled = cloudUniforms.enabled;
+      shader.uniforms.orbitradarCloudOpacity = cloudUniforms.opacity;
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
@@ -134,7 +148,7 @@ export const EarthOverlays = ({
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;",
+          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;\nuniform sampler2D orbitradarCloudMap;\nuniform float orbitradarCloudEnabled;\nuniform float orbitradarCloudOpacity;",
         )
         .replace(
           "#include <opaque_fragment>",
@@ -142,11 +156,16 @@ export const EarthOverlays = ({
 float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
+vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv);
+vec3 orbitradarCloudNightColor = vec3(0.055, 0.075, 0.14);
+vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, vec3(1.0), mix(1.0, orbitradarDay, orbitradarNightEnabled));
+float orbitradarCloudAlpha = orbitradarCloudSample.a * orbitradarCloudOpacity * orbitradarCloudEnabled;
+outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
 #include <opaque_fragment>`,
         );
     };
     material.customProgramCacheKey = () =>
-      `${previousCacheKey.call(material)}-orbitradar-night-surface-v1`;
+      `${previousCacheKey.call(material)}-orbitradar-cloud-surface-v2`;
     material.needsUpdate = true;
     return () => {
       material.onBeforeCompile = previousCompile;
@@ -159,21 +178,16 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
     const uniforms = nightUniformsRef.current;
     uniforms.enabled.value = nightEnabled ? 1 : 0;
     uniforms.sunDirection.value.copy(toOverlayDirection(sun));
-    cloudUniformsRef.current.enabled.value = nightEnabled ? 1 : 0;
-    cloudUniformsRef.current.sunDirection.value.copy(toOverlayDirection(sun));
   }, [nightEnabled, sun]);
 
   useEffect(() => {
-    const disposeCloud = () => {
-      if (cloudRef.current && globe) globe.scene().remove(cloudRef.current);
-      const material = cloudRef.current?.material as
-        THREE.ShaderMaterial | undefined;
-      const texture = material?.uniforms.cloudMap?.value as
-        THREE.Texture | undefined;
-      texture?.dispose();
-      cloudRef.current?.geometry.dispose();
-      material?.dispose();
-      cloudRef.current = null;
+    const clearCloudTexture = () => {
+      if (cloudTextureRef.current) {
+        cloudTextureRef.current.dispose();
+        cloudTextureRef.current = null;
+      }
+      cloudUniformsRef.current.map.value = emptyCloudTexture;
+      cloudUniformsRef.current.enabled.value = 0;
     };
 
     if (
@@ -181,7 +195,7 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
       !cloudsEnabled ||
       (!cloudAvailable && !import.meta.env.VITE_CLOUD_IMAGE_URL)
     ) {
-      disposeCloud();
+      clearCloudTexture();
       return;
     }
     const loader = new THREE.TextureLoader();
@@ -205,58 +219,10 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
           globe.renderer().capabilities.getMaxAnisotropy(),
         );
         texture.needsUpdate = true;
-        const uniforms = cloudUniformsRef.current;
-        uniforms.sunDirection.value.copy(toOverlayDirection(sunRef.current));
-        uniforms.enabled.value = nightEnabledRef.current ? 1 : 0;
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(
-            globe.getGlobeRadius() * CLOUD_RADIUS_SCALE,
-            64,
-            32,
-          ),
-          new THREE.ShaderMaterial({
-            uniforms: {
-              cloudMap: { value: texture },
-              sunDirection: uniforms.sunDirection,
-              nightEnabled: uniforms.enabled,
-              opacity: { value: CLOUD_OPACITY },
-            },
-            transparent: true,
-            depthTest: true,
-            depthWrite: false,
-            side: THREE.FrontSide,
-            vertexShader: `
-              varying vec2 vUv;
-              varying vec3 vNormal;
-              void main() {
-                vUv = uv;
-                vNormal = normalize(normal);
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-              }
-            `,
-            fragmentShader: `
-              uniform sampler2D cloudMap;
-              uniform vec3 sunDirection;
-              uniform float nightEnabled;
-              uniform float opacity;
-              varying vec2 vUv;
-              varying vec3 vNormal;
-              void main() {
-                vec4 cloud = texture2D(cloudMap, vUv);
-                float daylight = dot(normalize(vNormal), normalize(sunDirection));
-                float day = mix(1.0, smoothstep(-0.22, 0.12, daylight), nightEnabled);
-                vec3 nightCloudColor = vec3(0.055, 0.075, 0.14);
-                vec3 cloudColor = mix(nightCloudColor, vec3(1.0), day);
-                gl_FragColor = vec4(cloudColor, cloud.a * opacity);
-              }
-            `,
-          }),
-        );
-        mesh.name = "orbitradar-cloud-cover";
-        mesh.rotation.y = GLOBE_TEXTURE_ROTATION_Y;
-        mesh.renderOrder = 2;
-        globe.scene().add(mesh);
-        cloudRef.current = mesh;
+        if (cloudTextureRef.current) cloudTextureRef.current.dispose();
+        cloudTextureRef.current = texture;
+        cloudUniformsRef.current.map.value = texture;
+        cloudUniformsRef.current.enabled.value = 1;
       },
       undefined,
       () => {
@@ -265,9 +231,16 @@ outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbi
     );
     return () => {
       cancelled = true;
-      disposeCloud();
+      clearCloudTexture();
     };
-  }, [globe, cloudsEnabled, cloudAvailable, cloudUrl]);
+  }, [globe, cloudsEnabled, cloudAvailable, cloudUrl, emptyCloudTexture]);
+
+  useEffect(
+    () => () => {
+      emptyCloudTexture.dispose();
+    },
+    [emptyCloudTexture],
+  );
 
   return null;
 };

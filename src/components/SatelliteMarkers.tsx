@@ -70,8 +70,10 @@ const SatelliteMarkers = ({
   const snapshotVersionRef = useRef(snapshotVersion);
   const hasRenderedSnapshotRef = useRef(false);
   const latestRef = useRef({ positions, onSelect });
+  const stylePositionsRef = useRef(positions);
   const trackedIds = useMemo(() => new Set(trackedNoradIds), [trackedNoradIds]);
   latestRef.current = { positions, onSelect };
+  stylePositionsRef.current = positions;
 
   useEffect(() => {
     if (!globe) return;
@@ -81,8 +83,14 @@ const SatelliteMarkers = ({
       new Float32Array(markerCapacity * 3),
       3,
     );
-    targetPositions.setUsage(THREE.DynamicDrawUsage);
+    targetPositions.setUsage(THREE.StreamDrawUsage);
     geometry.setAttribute("instanceTargetPosition", targetPositions);
+    const startPositions = new THREE.InstancedBufferAttribute(
+      new Float32Array(markerCapacity * 3),
+      3,
+    );
+    startPositions.setUsage(THREE.StreamDrawUsage);
+    geometry.setAttribute("instanceStartPosition", startPositions);
 
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -98,6 +106,7 @@ const SatelliteMarkers = ({
           `#include <common>
 #ifdef USE_INSTANCING
 attribute vec3 instanceTargetPosition;
+attribute vec3 instanceStartPosition;
 uniform float markerInterpolation;
 #endif`,
         )
@@ -109,7 +118,7 @@ uniform float markerInterpolation;
 #endif
 #ifdef USE_INSTANCING
   mat4 interpolatedInstanceMatrix = instanceMatrix;
-  vec3 markerStart = instanceMatrix[3].xyz;
+  vec3 markerStart = instanceStartPosition;
   float markerStartRadius = length(markerStart);
   float markerTargetRadius = length(instanceTargetPosition);
   vec3 markerPosition = mix(markerStart, instanceTargetPosition, markerInterpolation);
@@ -255,8 +264,9 @@ gl_Position = projectionMatrix * mvPosition;`,
       setMarkerCapacity(capacity);
       return;
     }
-    const transform = new THREE.Object3D();
-    const color = new THREE.Color();
+    const startPositions = mesh.geometry.getAttribute(
+      "instanceStartPosition",
+    ) as THREE.InstancedBufferAttribute;
     const targetPositions = mesh.geometry.getAttribute(
       "instanceTargetPosition",
     ) as THREE.InstancedBufferAttribute;
@@ -287,31 +297,17 @@ gl_Position = projectionMatrix * mvPosition;`,
               target,
             };
       nextMotion.set(position.noradId, motion);
-      transform.position.copy(motion.start);
-      transform.scale.setScalar(
-        getSatelliteMarkerScale(
-          globe.getGlobeRadius(),
-          position.noradId === selectedNoradId,
-          trackedIds.has(position.noradId),
-        ),
+      startPositions.setXYZ(
+        index,
+        motion.start.x,
+        motion.start.y,
+        motion.start.z,
       );
-      transform.updateMatrix();
-      mesh.setMatrixAt(index, transform.matrix);
       targetPositions.setXYZ(
         index,
         motion.target.x,
         motion.target.y,
         motion.target.z,
-      );
-      mesh.setColorAt(
-        index,
-        color.set(
-          position.noradId === selectedNoradId
-            ? SELECTED_SATELLITE_COLOR
-            : trackedIds.has(position.noradId)
-              ? getTrackedColor(position.noradId)
-              : position.color,
-        ),
       );
     });
     markerMotionRef.current = nextMotion;
@@ -332,16 +328,55 @@ gl_Position = projectionMatrix * mvPosition;`,
       interpolationUniformRef.current.value = 0;
     }
     mesh.count = positions.length;
-    mesh.instanceMatrix.needsUpdate = true;
+    startPositions.needsUpdate = true;
     targetPositions.needsUpdate = true;
+  }, [globe, positions, snapshotVersion, markerCapacity]);
+
+  const styleSignature = useMemo(
+    () =>
+      positions
+        .map((position) => `${position.noradId}:${position.color}`)
+        .join("|"),
+    [positions],
+  );
+  const positionCount = positions.length;
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!globe || !mesh || positionCount > capacityRef.current) return;
+    const transform = new THREE.Object3D();
+    const color = new THREE.Color();
+    stylePositionsRef.current.forEach((position, index) => {
+      transform.position.set(0, 0, 0);
+      transform.scale.setScalar(
+        getSatelliteMarkerScale(
+          globe.getGlobeRadius(),
+          position.noradId === selectedNoradId,
+          trackedIds.has(position.noradId),
+        ),
+      );
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+      mesh.setColorAt(
+        index,
+        color.set(
+          position.noradId === selectedNoradId
+            ? SELECTED_SATELLITE_COLOR
+            : trackedIds.has(position.noradId)
+              ? getTrackedColor(position.noradId)
+              : position.color,
+        ),
+      );
+    });
+    mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }, [
     globe,
-    positions,
-    snapshotVersion,
     selectedNoradId,
     trackedIds,
     getTrackedColor,
+    styleSignature,
+    positionCount,
     markerCapacity,
   ]);
 

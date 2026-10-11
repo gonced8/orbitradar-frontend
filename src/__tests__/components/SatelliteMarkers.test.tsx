@@ -40,14 +40,16 @@ describe("SatelliteMarkers", () => {
         altitudeClass: "leo",
       }),
     );
+    const getTrackedColor = () => "#fbbf24";
+    const trackedNoradIds: number[] = [];
 
     const { rerender } = render(
       <SatelliteMarkers
         globe={globe}
         positions={positions}
         selectedNoradId={1}
-        trackedNoradIds={[]}
-        getTrackedColor={() => "#fbbf24"}
+        trackedNoradIds={trackedNoradIds}
+        getTrackedColor={getTrackedColor}
         onSelect={vi.fn()}
       />,
     );
@@ -85,6 +87,13 @@ describe("SatelliteMarkers", () => {
     );
     expect(targetPositions).toBeInstanceOf(THREE.InstancedBufferAttribute);
     expect(targetPositions.getX(0)).toBe(101);
+    const startPositions = currentMesh.geometry.getAttribute(
+      "instanceStartPosition",
+    );
+    expect(startPositions).toBeInstanceOf(THREE.InstancedBufferAttribute);
+
+    const setMatrixAt = vi.spyOn(currentMesh, "setMatrixAt");
+    const setColorAt = vi.spyOn(currentMesh, "setColorAt");
 
     const material = currentMesh.material as THREE.MeshBasicMaterial;
     const shader = {
@@ -109,12 +118,14 @@ describe("SatelliteMarkers", () => {
         positions={movedPositions}
         snapshotVersion={2}
         selectedNoradId={1}
-        trackedNoradIds={[]}
-        getTrackedColor={() => "#fbbf24"}
+        trackedNoradIds={trackedNoradIds}
+        getTrackedColor={getTrackedColor}
         onSelect={vi.fn()}
       />,
     );
     await waitFor(() => expect(targetPositions.getY(0)).toBe(10));
+    expect(setMatrixAt).not.toHaveBeenCalled();
+    expect(setColorAt).not.toHaveBeenCalled();
     const startMatrix = new THREE.Matrix4();
     const startPosition = new THREE.Vector3();
     currentMesh.getMatrixAt(0, startMatrix);

@@ -40,6 +40,8 @@ const CATALOG_PAGE_SIZE = 50;
 // accessor is interpreted as a property name by react-globe.gl.
 const SELECTED_ORBIT_COLOR = "#ffd166";
 const SELECTED_ORBIT_STROKE = 1.8;
+const USER_LABEL_COLOR = () => "rgba(255, 165, 0, 0.9)";
+const SELECTED_ORBIT_COLOR_ACCESSOR = () => SELECTED_ORBIT_COLOR;
 const Globe = lazy(() => import("react-globe.gl"));
 const SatelliteMarkers = lazy(() => import("./SatelliteMarkers"));
 
@@ -324,6 +326,17 @@ const World: React.FC = () => {
       ),
     [satellitePositions, altitudeFilter],
   );
+  const labelsData = useMemo(
+    () => (userLocation ? [userLocation] : []),
+    [userLocation],
+  );
+  const pathsData = useMemo(
+    () =>
+      altitudeFilter !== "none" && orbitPoints.length > 0
+        ? [{ points: orbitPoints }]
+        : [],
+    [altitudeFilter, orbitPoints],
+  );
   const displayedEntries =
     explorerTab === "favorites"
       ? favoriteSatellites
@@ -402,27 +415,19 @@ const World: React.FC = () => {
                   globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
                   backgroundColor="black"
                   showAtmosphere
-                  labelsData={userLocation ? [userLocation] : []}
+                  labelsData={labelsData}
                   labelLat="lat"
                   labelLng="lng"
                   labelText="name"
-                  labelColor={() => "rgba(255, 165, 0, 0.9)"}
+                  labelColor={USER_LABEL_COLOR}
                   labelSize={1}
                   labelDotRadius={0.5}
-                  pathsData={
-                    altitudeFilter !== "none" && orbitPoints.length > 0
-                      ? [
-                          {
-                            points: orbitPoints,
-                          },
-                        ]
-                      : []
-                  }
+                  pathsData={pathsData}
                   pathPoints="points"
                   pathPointLat="lat"
                   pathPointLng="lng"
                   pathPointAlt="alt"
-                  pathColor={() => SELECTED_ORBIT_COLOR}
+                  pathColor={SELECTED_ORBIT_COLOR_ACCESSOR}
                   pathStroke={SELECTED_ORBIT_STROKE}
                   pathTransitionDuration={0}
                 />

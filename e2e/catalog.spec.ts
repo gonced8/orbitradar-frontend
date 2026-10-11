@@ -14,6 +14,18 @@ test.beforeEach(async ({ page }) => {
       json: { schemaVersion: 1, state: "ready", fetchedAt: catalog.fetchedAt },
     }),
   );
+  await page.route("**/data/cloud-status.json", (route) =>
+    route.fulfill({
+      json: {
+        schemaVersion: 2,
+        state: "ready",
+        sourceId: "noaa-gfs-tcc",
+        fetchedAt: catalog.fetchedAt,
+        validAt: catalog.fetchedAt,
+        modelCycle: "20261011T06Z",
+      },
+    }),
+  );
   await page.route("https://unpkg.com/**", (route) => route.abort());
 });
 
@@ -22,6 +34,9 @@ test("loads the shared OMM snapshot and searches a six-digit catalog ID", async 
 }) => {
   await page.goto("/");
   await expect(page.getByText("3 satellites", { exact: true })).toBeVisible();
+  const freshness = page.locator('[aria-label="Data freshness"]').first();
+  await expect(freshness).toContainText(/Satellite/);
+  await expect(freshness).toContainText(/Cloud/);
   const search = page.getByRole("searchbox", {
     name: /find by name or norad id/i,
   });

@@ -47,6 +47,8 @@ describe("useSatelliteCatalog", () => {
       expect(result.current.trackedSatellites).toHaveLength(1),
     );
     expect(result.current.trackedSatellites[0].noradId).toBe(25544);
+    expect(result.current.sourceUpdatedAt).toBe(snapshot.fetchedAt);
+    expect(result.current.publisherStatus?.state).toBe("ready");
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "/data/catalog.json",
       "/data/catalog-status.json",
@@ -109,6 +111,45 @@ describe("useSatelliteCatalog", () => {
       expect(result.current.trackedSatellites).toHaveLength(1),
     );
     expect(result.current.statusMessage).toContain("local cache");
+    expect(result.current.sourceUpdatedAt).toBeNull();
+  });
+
+  it("keeps the published source timestamp separate from local cache time", async () => {
+    const sourceTimestamp = "2026-10-09T12:00:00.000Z";
+    localStorage.setItem(
+      "orbitradar_active_satellite_tles_v2",
+      JSON.stringify({
+        satellites: [
+          {
+            noradId: 25544,
+            name: "Cached ISS",
+            line1:
+              "1 25544U 98067A   19156.50900463  .00003075  00000-0  59442-4 0  9992",
+            line2:
+              "2 25544  51.6433  59.2583 0008217  16.4489 347.6017 15.51174618173442",
+          },
+        ],
+      }),
+    );
+    localStorage.setItem(
+      "orbitradar_active_satellite_source_timestamp_v2",
+      sourceTimestamp,
+    );
+    localStorage.setItem(
+      "orbitradar_active_satellite_timestamp_v2",
+      new Date().toISOString(),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("offline", { status: 503 })),
+    );
+
+    const { result } = renderHook(() =>
+      useSatelliteCatalog({ autoRefresh: false, refreshIntervalHours: 1 }),
+    );
+    await waitFor(() =>
+      expect(result.current.sourceUpdatedAt).toBe(sourceTimestamp),
+    );
   });
 
   it("shows the publisher's safe pause reason with the last known snapshot", async () => {

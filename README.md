@@ -14,6 +14,7 @@ Orbit Radar is a React + TypeScript satellite tracker built with Vite, Tailwind 
 - Telemetry panel with latitude, longitude, altitude, and speed.
 - Optional UTC-based day/night shading and a Live, Simulation, or Paused device-local clock.
 - Optional cached NOAA GFS total-cloud-cover overlay; the latest global analysis remains visible during time-lapse.
+- At-a-glance freshness indicators for the shared satellite snapshot and cloud analysis, with detailed local timestamps in the control panel.
 - Optional selected-satellite camera follow mode.
 - Browser geolocation marker for the current user when permission is granted.
 - Geometric horizon-crossing predictions that identify passes clipped by the 24-hour window.
@@ -42,6 +43,18 @@ Altitude filters are broad visualization bands: low below 2,000 km, medium from 
 The globe's night side uses the simulated instant, seasonal solar declination, and the equation of time. During time-lapse it follows simulation time; in live mode it follows the current instant. The compact clock formats that instant in the device's local time zone. This is a visual Earth-lighting model and does not simulate city lights or atmospheric scattering.
 
 Cloud cover is an optional cached NOAA [GFS](https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast) total-cloud-cover analysis. The publisher downloads the latest complete global `tcc` field from [NOMADS](https://nomads.ncep.noaa.gov/), converts it to a smooth white alpha texture, and publishes it to GitHub Pages every six hours, trying recent model cycles when the newest cycle is not ready. The current image and publisher state are available at `data/clouds/latest.png` and `data/cloud-status.json` on the `gh-pages` branch. It represents modelled cloud amount rather than direct satellite photography, precipitation, optical thickness, historical weather playback, or a three-dimensional cloud field. The globe remains usable if the weather cache is unavailable.
+
+## Data freshness
+
+The compact card shows the age and health of both shared data sources. The expanded satellite panel also shows exact timestamps in the device's local time zone. These indicators describe the published source data; loading a copy from a browser's local cache does not reset its age.
+
+Satellite freshness uses the shared catalog snapshot's `fetchedAt` timestamp. It is marked **Fresh** for up to four hours while the publisher is healthy. A healthy snapshot older than four hours is **Delayed**; a paused or failed publisher with an older retained snapshot is **Stale**. This timestamp describes when the catalog was downloaded from CelesTrak. Each orbital element also has its own `EPOCH`, which is the epoch used by SGP4 propagation and is a different physical quantity.
+
+Cloud freshness uses the NOAA analysis `validAt` timestamp, rather than the time the PNG was downloaded. It is marked **Fresh** for up to twelve hours, matching two six-hour model cycles. Older healthy analysis is **Delayed**; a retained image from a failed publisher is **Stale**. The detailed panel also shows the cloud image publication time and model cycle. Time-lapse changes the simulated lighting and clock, but cloud freshness continues to refer to the real source analysis time.
+
+The raw publisher metadata is available from [`catalog-status.json`](https://orbitradar.goncaloraposo.com/data/catalog-status.json) and [`cloud-status.json`](https://orbitradar.goncaloraposo.com/data/cloud-status.json). The catalog status reports publisher state and snapshot `fetchedAt`; the cloud status reports publisher state, image `fetchedAt`, NOAA `validAt`, and `modelCycle`.
+
+Deployments that replace the built-in sources can set `VITE_CATALOG_URL` with an optional matching `VITE_CATALOG_STATUS_URL`, and `VITE_CLOUD_IMAGE_URL` with an optional matching `VITE_CLOUD_STATUS_URL`. Without a matching status URL, custom catalog data can still show age from its snapshot, while custom cloud imagery is reported as having unavailable freshness metadata instead of being labelled with the built-in NOAA status.
 
 ## Data source
 

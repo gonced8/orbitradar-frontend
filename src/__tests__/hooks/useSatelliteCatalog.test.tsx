@@ -52,6 +52,7 @@ describe("useSatelliteCatalog", () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "/data/catalog.json",
       "/data/catalog-status.json",
+      "/data/catalog-status.json",
     ]);
 
     await act(async () => result.current.refreshCatalog());

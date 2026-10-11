@@ -23,31 +23,149 @@ type Props = {
   onSelect: (noradId: number) => void;
 };
 
-type MarkerMotion = {
-  start: THREE.Vector3;
-  target: THREE.Vector3;
+type PositionBuffer = {
+  interleaved: THREE.InstancedInterleavedBuffer;
+  start: THREE.InterleavedBufferAttribute;
+  target: THREE.InterleavedBufferAttribute;
+};
+
+const DEGREES_TO_RADIANS = Math.PI / 180;
+const POSITION_BUFFER_COUNT = 2;
+
+const createPositionBuffer = (capacity: number): PositionBuffer => {
+  const interleaved = new THREE.InstancedInterleavedBuffer(
+    new Float32Array(capacity * 6),
+    6,
+  );
+  interleaved.setUsage(THREE.StreamDrawUsage);
+  return {
+    interleaved,
+    start: new THREE.InterleavedBufferAttribute(interleaved, 3, 0, false),
+    target: new THREE.InterleavedBufferAttribute(interleaved, 3, 3, false),
+  };
+};
+
+const writeGlobeCoordinates = (
+  lat: number,
+  lng: number,
+  altitude: number,
+  radius: number,
+  output: Float32Array,
+  offset: number,
+) => {
+  const phi = (90 - lat) * DEGREES_TO_RADIANS;
+  const theta = (90 - lng) * DEGREES_TO_RADIANS;
+  const scaledRadius = radius * (1 + altitude);
+  const sinPhi = Math.sin(phi);
+  output[offset] = scaledRadius * sinPhi * Math.cos(theta);
+  output[offset + 1] = scaledRadius * Math.cos(phi);
+  output[offset + 2] = scaledRadius * sinPhi * Math.sin(theta);
+};
+
+const writeInterpolatedPosition = (
+  start: Float32Array,
+  target: Float32Array,
+  offset: number,
+  progress: number,
+  output: Float32Array,
+  outputOffset: number,
+) => {
+  const startX = start[offset];
+  const startY = start[offset + 1];
+  const startZ = start[offset + 2];
+  const targetX = target[offset];
+  const targetY = target[offset + 1];
+  const targetZ = target[offset + 2];
+  const startRadius = Math.hypot(startX, startY, startZ);
+  const targetRadius = Math.hypot(targetX, targetY, targetZ);
+
+  if (startRadius === 0 || targetRadius === 0) {
+    output[outputOffset] = THREE.MathUtils.lerp(startX, targetX, progress);
+    output[outputOffset + 1] = THREE.MathUtils.lerp(startY, targetY, progress);
+    output[outputOffset + 2] = THREE.MathUtils.lerp(startZ, targetZ, progress);
+    return;
+  }
+
+  const directionX = THREE.MathUtils.lerp(
+    startX / startRadius,
+    targetX / targetRadius,
+    progress,
+  );
+  const directionY = THREE.MathUtils.lerp(
+    startY / startRadius,
+    targetY / targetRadius,
+    progress,
+  );
+  const directionZ = THREE.MathUtils.lerp(
+    startZ / startRadius,
+    targetZ / targetRadius,
+    progress,
+  );
+  const directionLength = Math.hypot(directionX, directionY, directionZ);
+  const radiusAtProgress = THREE.MathUtils.lerp(
+    startRadius,
+    targetRadius,
+    progress,
+  );
+  output[outputOffset] = (directionX / directionLength) * radiusAtProgress;
+  output[outputOffset + 1] = (directionY / directionLength) * radiusAtProgress;
+  output[outputOffset + 2] = (directionZ / directionLength) * radiusAtProgress;
+};
+
+const interpolatePackedPosition = (
+  start: Float32Array,
+  target: Float32Array,
+  index: number,
+  progress: number,
+  output: THREE.Vector3,
+) => {
+  const offset = index * 3;
+  const startX = start[offset];
+  const startY = start[offset + 1];
+  const startZ = start[offset + 2];
+  const targetX = target[offset];
+  const targetY = target[offset + 1];
+  const targetZ = target[offset + 2];
+  const startRadius = Math.hypot(startX, startY, startZ);
+  const targetRadius = Math.hypot(targetX, targetY, targetZ);
+  if (startRadius === 0 || targetRadius === 0) {
+    output.set(
+      THREE.MathUtils.lerp(startX, targetX, progress),
+      THREE.MathUtils.lerp(startY, targetY, progress),
+      THREE.MathUtils.lerp(startZ, targetZ, progress),
+    );
+    return;
+  }
+  const directionX = THREE.MathUtils.lerp(
+    startX / startRadius,
+    targetX / targetRadius,
+    progress,
+  );
+  const directionY = THREE.MathUtils.lerp(
+    startY / startRadius,
+    targetY / targetRadius,
+    progress,
+  );
+  const directionZ = THREE.MathUtils.lerp(
+    startZ / startRadius,
+    targetZ / targetRadius,
+    progress,
+  );
+  const directionLength = Math.hypot(directionX, directionY, directionZ);
+  const radiusAtProgress = THREE.MathUtils.lerp(
+    startRadius,
+    targetRadius,
+    progress,
+  );
+  output.set(
+    (directionX / directionLength) * radiusAtProgress,
+    (directionY / directionLength) * radiusAtProgress,
+    (directionZ / directionLength) * radiusAtProgress,
+  );
 };
 
 const interpolationProgress = (startedAt: number, durationMs: number) =>
   getMarkerInterpolationProgress(performance.now() - startedAt, durationMs);
-
-const interpolateAroundGlobe = (
-  start: THREE.Vector3,
-  target: THREE.Vector3,
-  progress: number,
-) => {
-  const startRadius = start.length();
-  const targetRadius = target.length();
-  if (startRadius === 0 || targetRadius === 0)
-    return start.clone().lerp(target, progress);
-
-  return start
-    .clone()
-    .divideScalar(startRadius)
-    .lerp(target.clone().divideScalar(targetRadius), progress)
-    .normalize()
-    .multiplyScalar(THREE.MathUtils.lerp(startRadius, targetRadius, progress));
-};
 
 const SatelliteMarkers = ({
   globe,
@@ -66,11 +184,23 @@ const SatelliteMarkers = ({
   const snapshotIntervalRef = useRef(1000);
   const lastSnapshotAtRef = useRef<number | null>(null);
   const interpolationUniformRef = useRef({ value: 1 });
-  const markerMotionRef = useRef(new Map<number, MarkerMotion>());
+  const markerBufferUniformRef = useRef({ value: 0 });
+  const activeBufferRef = useRef(0);
+  const positionBuffersRef = useRef<PositionBuffer[]>([]);
+  const motionIndexRef = useRef(new Map<number, number>());
+  const motionIdsRef = useRef(new Int32Array(0));
+  const motionCountRef = useRef(0);
+  const motionStartRef = useRef(new Float32Array(0));
+  const motionTargetRef = useRef(new Float32Array(0));
+  const motionScratchStartRef = useRef(new Float32Array(0));
+  const motionScratchTargetRef = useRef(new Float32Array(0));
+  const styleIdsRef = useRef(new Int32Array(0));
+  const styleColorsRef = useRef<string[]>([]);
   const snapshotVersionRef = useRef(snapshotVersion);
   const hasRenderedSnapshotRef = useRef(false);
   const latestRef = useRef({ positions, onSelect });
   const stylePositionsRef = useRef(positions);
+  const [styleRevision, setStyleRevision] = useState(0);
   const trackedIds = useMemo(() => new Set(trackedNoradIds), [trackedNoradIds]);
   latestRef.current = { positions, onSelect };
   stylePositionsRef.current = positions;
@@ -79,18 +209,16 @@ const SatelliteMarkers = ({
     if (!globe) return;
     capacityRef.current = markerCapacity;
     const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const targetPositions = new THREE.InstancedBufferAttribute(
-      new Float32Array(markerCapacity * 3),
-      3,
+    const positionBuffers = Array.from({ length: POSITION_BUFFER_COUNT }, () =>
+      createPositionBuffer(markerCapacity),
     );
-    targetPositions.setUsage(THREE.StreamDrawUsage);
-    geometry.setAttribute("instanceTargetPosition", targetPositions);
-    const startPositions = new THREE.InstancedBufferAttribute(
-      new Float32Array(markerCapacity * 3),
-      3,
-    );
-    startPositions.setUsage(THREE.StreamDrawUsage);
-    geometry.setAttribute("instanceStartPosition", startPositions);
+    positionBuffersRef.current = positionBuffers;
+    geometry.setAttribute("instanceStartPosition0", positionBuffers[0].start);
+    geometry.setAttribute("instanceTargetPosition0", positionBuffers[0].target);
+    geometry.setAttribute("instanceStartPosition1", positionBuffers[1].start);
+    geometry.setAttribute("instanceTargetPosition1", positionBuffers[1].target);
+    activeBufferRef.current = 0;
+    markerBufferUniformRef.current.value = 0;
 
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -100,14 +228,18 @@ const SatelliteMarkers = ({
     });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.markerInterpolation = interpolationUniformRef.current;
+      shader.uniforms.markerBufferIndex = markerBufferUniformRef.current;
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
           `#include <common>
 #ifdef USE_INSTANCING
-attribute vec3 instanceTargetPosition;
-attribute vec3 instanceStartPosition;
+attribute vec3 instanceTargetPosition0;
+attribute vec3 instanceStartPosition0;
+attribute vec3 instanceTargetPosition1;
+attribute vec3 instanceStartPosition1;
 uniform float markerInterpolation;
+uniform float markerBufferIndex;
 #endif`,
         )
         .replace(
@@ -118,14 +250,15 @@ uniform float markerInterpolation;
 #endif
 #ifdef USE_INSTANCING
   mat4 interpolatedInstanceMatrix = instanceMatrix;
-  vec3 markerStart = instanceStartPosition;
+  vec3 markerStart = mix(instanceStartPosition0, instanceStartPosition1, markerBufferIndex);
+  vec3 markerTarget = mix(instanceTargetPosition0, instanceTargetPosition1, markerBufferIndex);
   float markerStartRadius = length(markerStart);
-  float markerTargetRadius = length(instanceTargetPosition);
-  vec3 markerPosition = mix(markerStart, instanceTargetPosition, markerInterpolation);
+  float markerTargetRadius = length(markerTarget);
+  vec3 markerPosition = mix(markerStart, markerTarget, markerInterpolation);
   if (markerStartRadius > 0.0 && markerTargetRadius > 0.0) {
     vec3 markerDirection = normalize(mix(
       markerStart / markerStartRadius,
-      instanceTargetPosition / markerTargetRadius,
+      markerTarget / markerTargetRadius,
       markerInterpolation
     ));
     markerPosition = markerDirection * mix(
@@ -141,7 +274,7 @@ mvPosition = modelViewMatrix * mvPosition;
 gl_Position = projectionMatrix * mvPosition;`,
         );
     };
-    material.customProgramCacheKey = () => "orbitradar-marker-interpolation-v1";
+    material.customProgramCacheKey = () => "orbitradar-marker-interpolation-v2";
 
     const mesh = new THREE.InstancedMesh(geometry, material, markerCapacity);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(
@@ -201,14 +334,20 @@ gl_Position = projectionMatrix * mvPosition;`,
         globe.getGlobeRadius(),
       );
       const projected = new THREE.Vector3();
+      const worldPosition = new THREE.Vector3();
+      const rayDirection = new THREE.Vector3();
+      const earthHit = new THREE.Vector3();
+      const ray = new THREE.Ray(camera.position, rayDirection);
       let closest: { noradId: number; distance: number } | null = null;
       for (const position of latestRef.current.positions) {
-        const motion = markerMotionRef.current.get(position.noradId);
-        if (!motion) continue;
-        const worldPosition = interpolateAroundGlobe(
-          motion.start,
-          motion.target,
+        const motionIndex = motionIndexRef.current.get(position.noradId);
+        if (motionIndex === undefined) continue;
+        interpolatePackedPosition(
+          motionStartRef.current,
+          motionTargetRef.current,
+          motionIndex,
           progress,
+          worldPosition,
         );
         projected.copy(worldPosition).project(camera);
         if (projected.z < -1 || projected.z > 1) continue;
@@ -221,14 +360,11 @@ gl_Position = projectionMatrix * mvPosition;`,
         // A generous target makes the tiny visual markers usable on touch screens.
         if (distance > 14 || (closest && distance >= closest.distance))
           continue;
-        const ray = new THREE.Ray(
-          camera.position,
-          worldPosition.clone().sub(camera.position).normalize(),
-        );
-        const earthHit = ray.intersectSphere(earth, new THREE.Vector3());
+        rayDirection.copy(worldPosition).sub(camera.position).normalize();
+        const hit = ray.intersectSphere(earth, earthHit);
         if (
-          earthHit &&
-          earthHit.distanceTo(camera.position) <
+          hit &&
+          hit.distanceTo(camera.position) <
             worldPosition.distanceTo(camera.position) - 0.001
         )
           continue;
@@ -264,12 +400,26 @@ gl_Position = projectionMatrix * mvPosition;`,
       setMarkerCapacity(capacity);
       return;
     }
-    const startPositions = mesh.geometry.getAttribute(
-      "instanceStartPosition",
-    ) as THREE.InstancedBufferAttribute;
-    const targetPositions = mesh.geometry.getAttribute(
-      "instanceTargetPosition",
-    ) as THREE.InstancedBufferAttribute;
+    if (positions.length === 0) {
+      mesh.count = 0;
+      motionCountRef.current = 0;
+      motionIndexRef.current.clear();
+      return;
+    }
+    const positionBuffers = positionBuffersRef.current;
+    if (positionBuffers.length !== POSITION_BUFFER_COUNT) return;
+    if (motionStartRef.current.length !== markerCapacity * 3) {
+      motionStartRef.current = new Float32Array(markerCapacity * 3);
+      motionTargetRef.current = new Float32Array(markerCapacity * 3);
+      motionScratchStartRef.current = new Float32Array(markerCapacity * 3);
+      motionScratchTargetRef.current = new Float32Array(markerCapacity * 3);
+      motionIdsRef.current = new Int32Array(markerCapacity);
+      styleIdsRef.current = new Int32Array(markerCapacity);
+      styleColorsRef.current = new Array(markerCapacity);
+      motionCountRef.current = 0;
+      motionIndexRef.current.clear();
+      hasRenderedSnapshotRef.current = false;
+    }
     const now = performance.now();
     const isNewSnapshot =
       snapshotVersion !== snapshotVersionRef.current ||
@@ -278,39 +428,111 @@ gl_Position = projectionMatrix * mvPosition;`,
       interpolationStartedAtRef.current,
       interpolationDurationRef.current,
     );
-    const nextMotion = new Map<number, MarkerMotion>();
-    positions.forEach((position, index) => {
-      const coords = globe.getCoords(position.lat, position.lng, position.alt);
-      const target = new THREE.Vector3(coords.x, coords.y, coords.z);
-      const previous = markerMotionRef.current.get(position.noradId);
-      const motion =
-        previous && !isNewSnapshot
-          ? previous
-          : {
-              start: previous
-                ? interpolateAroundGlobe(
-                    previous.start,
-                    previous.target,
-                    oldProgress,
-                  )
-                : target.clone(),
-              target,
-            };
-      nextMotion.set(position.noradId, motion);
-      startPositions.setXYZ(
-        index,
-        motion.start.x,
-        motion.start.y,
-        motion.start.z,
-      );
-      targetPositions.setXYZ(
-        index,
-        motion.target.x,
-        motion.target.y,
-        motion.target.z,
-      );
-    });
-    markerMotionRef.current = nextMotion;
+    const previousIds = motionIdsRef.current;
+    let idsChanged = motionCountRef.current !== positions.length;
+    if (!idsChanged) {
+      for (let index = 0; index < positions.length; index += 1) {
+        if (previousIds[index] !== positions[index].noradId) {
+          idsChanged = true;
+          break;
+        }
+      }
+    }
+    const previousStart = motionStartRef.current;
+    const previousTarget = motionTargetRef.current;
+    const nextStart = motionScratchStartRef.current;
+    const nextTarget = motionScratchTargetRef.current;
+    const nextBufferIndex = hasRenderedSnapshotRef.current
+      ? 1 - activeBufferRef.current
+      : 0;
+    const gpuArray = positionBuffers[nextBufferIndex].interleaved.array;
+    const radius = globe.getGlobeRadius();
+    let styleChanged = false;
+    for (let index = 0; index < positions.length; index += 1) {
+      const position = positions[index];
+      const offset = index * 3;
+      const previousIndex = motionIndexRef.current.get(position.noradId);
+      const previousOffset =
+        previousIndex === undefined ? -1 : previousIndex * 3;
+      const hasPrevious = previousOffset >= 0;
+
+      if (isNewSnapshot && hasPrevious) {
+        writeInterpolatedPosition(
+          previousStart,
+          previousTarget,
+          previousOffset,
+          oldProgress,
+          nextStart,
+          offset,
+        );
+        writeGlobeCoordinates(
+          position.lat,
+          position.lng,
+          position.alt,
+          radius,
+          nextTarget,
+          offset,
+        );
+      } else if (isNewSnapshot) {
+        writeGlobeCoordinates(
+          position.lat,
+          position.lng,
+          position.alt,
+          radius,
+          nextTarget,
+          offset,
+        );
+        nextStart[offset] = nextTarget[offset];
+        nextStart[offset + 1] = nextTarget[offset + 1];
+        nextStart[offset + 2] = nextTarget[offset + 2];
+      } else if (hasPrevious) {
+        nextStart[offset] = previousStart[previousOffset];
+        nextStart[offset + 1] = previousStart[previousOffset + 1];
+        nextStart[offset + 2] = previousStart[previousOffset + 2];
+        nextTarget[offset] = previousTarget[previousOffset];
+        nextTarget[offset + 1] = previousTarget[previousOffset + 1];
+        nextTarget[offset + 2] = previousTarget[previousOffset + 2];
+      } else {
+        writeGlobeCoordinates(
+          position.lat,
+          position.lng,
+          position.alt,
+          radius,
+          nextTarget,
+          offset,
+        );
+        nextStart[offset] = nextTarget[offset];
+        nextStart[offset + 1] = nextTarget[offset + 1];
+        nextStart[offset + 2] = nextTarget[offset + 2];
+      }
+
+      const gpuOffset = index * 6;
+      gpuArray[gpuOffset] = nextStart[offset];
+      gpuArray[gpuOffset + 1] = nextStart[offset + 1];
+      gpuArray[gpuOffset + 2] = nextStart[offset + 2];
+      gpuArray[gpuOffset + 3] = nextTarget[offset];
+      gpuArray[gpuOffset + 4] = nextTarget[offset + 1];
+      gpuArray[gpuOffset + 5] = nextTarget[offset + 2];
+      if (
+        styleIdsRef.current[index] !== position.noradId ||
+        styleColorsRef.current[index] !== position.color
+      )
+        styleChanged = true;
+      previousIds[index] = position.noradId;
+      styleIdsRef.current[index] = position.noradId;
+      styleColorsRef.current[index] = position.color;
+    }
+    motionStartRef.current = nextStart;
+    motionTargetRef.current = nextTarget;
+    motionScratchStartRef.current = previousStart;
+    motionScratchTargetRef.current = previousTarget;
+    motionCountRef.current = positions.length;
+    if (idsChanged) {
+      const nextIndex = new Map<number, number>();
+      for (let index = 0; index < positions.length; index += 1)
+        nextIndex.set(positions[index].noradId, index);
+      motionIndexRef.current = nextIndex;
+    }
     if (isNewSnapshot) {
       if (lastSnapshotAtRef.current !== null) {
         snapshotIntervalRef.current = updateSnapshotInterval(
@@ -328,17 +550,12 @@ gl_Position = projectionMatrix * mvPosition;`,
       interpolationUniformRef.current.value = 0;
     }
     mesh.count = positions.length;
-    startPositions.needsUpdate = true;
-    targetPositions.needsUpdate = true;
+    positionBuffers[nextBufferIndex].interleaved.needsUpdate = true;
+    activeBufferRef.current = nextBufferIndex;
+    markerBufferUniformRef.current.value = nextBufferIndex;
+    if (styleChanged) setStyleRevision((revision) => revision + 1);
   }, [globe, positions, snapshotVersion, markerCapacity]);
 
-  const styleSignature = useMemo(
-    () =>
-      positions
-        .map((position) => `${position.noradId}:${position.color}`)
-        .join("|"),
-    [positions],
-  );
   const positionCount = positions.length;
 
   useEffect(() => {
@@ -375,7 +592,7 @@ gl_Position = projectionMatrix * mvPosition;`,
     selectedNoradId,
     trackedIds,
     getTrackedColor,
-    styleSignature,
+    styleRevision,
     positionCount,
     markerCapacity,
   ]);

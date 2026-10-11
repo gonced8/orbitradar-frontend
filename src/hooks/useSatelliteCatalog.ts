@@ -211,6 +211,7 @@ export const useSatelliteCatalog = (
         if (status) setPublisherStatus(status);
       });
     };
+    refreshStatus();
     const interval = window.setInterval(
       refreshStatus,
       PUBLISHER_STATUS_REFRESH_MS,

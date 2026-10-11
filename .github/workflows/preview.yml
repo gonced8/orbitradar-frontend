@@ -23,6 +23,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The shared satellite and cloud snapshots are published on the root
+      # Pages site. A PR preview lives below /pr-preview/pr-<number>/, so
+      # include the published data in the preview bundle as well.
+      - name: Check out published shared data
+        if: github.event.action != 'closed'
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: .published-site
+          sparse-checkout: data
+          sparse-checkout-cone-mode: true
+
       - uses: actions/setup-node@v4
         if: github.event.action != 'closed'
         with:
@@ -35,7 +47,13 @@ jobs:
 
       - name: Build
         if: github.event.action != 'closed'
-        run: npm run build
+        run: |
+          npm run build
+          cp -a .published-site/data dist/data
+          test -s dist/data/catalog.json
+          test -s dist/data/catalog-status.json
+          test -s dist/data/cloud-status.json
+          test -s dist/data/clouds/latest.png
         env:
           # PR previews are served below /pr-preview/pr-<number>/ on the custom Pages domain.
           VITE_BASE: /pr-preview/pr-${{ github.event.number }}/

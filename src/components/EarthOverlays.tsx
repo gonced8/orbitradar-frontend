@@ -21,7 +21,9 @@ const cloudImageUrl = () => {
 // its coordinate system. Keep the same rotation when transforming the sun
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_OPACITY = 0.35;
+// Keep the coverage layer translucent so the underlying land and ocean
+// textures remain visible beneath dense daytime cloud fields.
+const CLOUD_OPACITY = 0.18;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()
@@ -53,13 +55,14 @@ export const EarthOverlays = ({
     map: { value: emptyCloudTexture as THREE.Texture },
     enabled: { value: 0 },
     opacity: { value: CLOUD_OPACITY },
+    texelSize: { value: new THREE.Vector2(1 / 1024, 1 / 512) },
   });
   const cloudTextureRef = useRef<THREE.Texture | null>(null);
   const timeMs = time.getTime();
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
   const cloudUrl = useMemo(() => {
     const url = cloudImageUrl();
-    if (!cloudVersion || import.meta.env.VITE_CLOUD_IMAGE_URL) return url;
+    if (!cloudVersion) return url;
     return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cloudVersion)}`;
   }, [cloudVersion]);
   const sunRef = useRef(sun);
@@ -105,6 +108,7 @@ export const EarthOverlays = ({
       shader.uniforms.orbitradarCloudMap = cloudUniforms.map;
       shader.uniforms.orbitradarCloudEnabled = cloudUniforms.enabled;
       shader.uniforms.orbitradarCloudOpacity = cloudUniforms.opacity;
+      shader.uniforms.orbitradarCloudTexelSize = cloudUniforms.texelSize;
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
@@ -117,7 +121,7 @@ export const EarthOverlays = ({
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;\nuniform sampler2D orbitradarCloudMap;\nuniform float orbitradarCloudEnabled;\nuniform float orbitradarCloudOpacity;",
+          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;\nuniform sampler2D orbitradarCloudMap;\nuniform float orbitradarCloudEnabled;\nuniform float orbitradarCloudOpacity;\nuniform vec2 orbitradarCloudTexelSize;",
         )
         .replace(
           "#include <opaque_fragment>",
@@ -125,10 +129,25 @@ export const EarthOverlays = ({
 float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
-vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv);
-vec3 orbitradarCloudNightColor = vec3(0.12, 0.16, 0.26);
-vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, vec3(1.0), mix(1.0, orbitradarDay, orbitradarNightEnabled));
-float orbitradarCloudAlpha = orbitradarCloudSample.a * orbitradarCloudOpacity * orbitradarCloudEnabled;
+// Soften the published raster so its finite resolution does not dominate the
+// globe at close zoom. A slightly wider cross kernel preserves broad fronts
+// while smoothing individual coverage pixels.
+vec2 orbitradarCloudBlurOffset = orbitradarCloudTexelSize * 2.5;
+vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv) * 0.4;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv + vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv - vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv + vec2(0.0, orbitradarCloudBlurOffset.y)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv - vec2(0.0, orbitradarCloudBlurOffset.y)) * 0.15;
+// The NOAA field is total coverage, not cloud albedo. Decode its deliberately
+// softened alpha back into a coverage estimate, then let solar illumination
+// determine the visible cloud brightness.
+float orbitradarCloudCoverage = clamp(pow(orbitradarCloudSample.a / 0.824, 0.82), 0.0, 1.0);
+float orbitradarCloudDensity = smoothstep(0.08, 0.92, orbitradarCloudCoverage);
+vec3 orbitradarCloudNightColor = vec3(0.025, 0.04, 0.075);
+vec3 orbitradarCloudDayColor = vec3(1.0, 1.0, 0.98);
+float orbitradarCloudSunlight = smoothstep(-0.16, 0.24, orbitradarDaylight);
+vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, orbitradarCloudDayColor, mix(1.0, orbitradarCloudSunlight, orbitradarNightEnabled));
+float orbitradarCloudAlpha = orbitradarCloudDensity * orbitradarCloudOpacity * orbitradarCloudEnabled;
 outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
 #include <opaque_fragment>`,
         );
@@ -201,10 +220,22 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
           globe.renderer().capabilities.getMaxAnisotropy(),
         );
         texture.needsUpdate = true;
-        if (cloudTextureRef.current) cloudTextureRef.current.dispose();
+        const image = texture.image as { width?: number; height?: number };
+        if (image.width && image.height) {
+          cloudUniformsRef.current.texelSize.value.set(
+            1 / image.width,
+            1 / image.height,
+          );
+        }
+        const previousTexture = cloudTextureRef.current;
         cloudTextureRef.current = texture;
         cloudUniformsRef.current.map.value = texture;
         cloudUniformsRef.current.enabled.value = 1;
+        if (previousTexture) {
+          if (typeof window.requestAnimationFrame === "function")
+            window.requestAnimationFrame(() => previousTexture.dispose());
+          else previousTexture.dispose();
+        }
       },
       undefined,
       () => {
@@ -212,17 +243,19 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
       },
     );
     return () => {
+      // Keep the previous texture bound while a replacement is loading. A
+      // failed refresh therefore leaves the last valid weather image visible.
       cancelled = true;
-      clearCloudTexture();
     };
   }, [globe, cloudsEnabled, cloudUrl, emptyCloudTexture]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
+      cloudTextureRef.current?.dispose();
+      cloudTextureRef.current = null;
       emptyCloudTexture.dispose();
-    },
-    [emptyCloudTexture],
-  );
+    };
+  }, [emptyCloudTexture]);
 
   return null;
 };

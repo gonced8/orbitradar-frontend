@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "state": "ready",
+  "sourceId": "noaa-gfs-tcc",
+  "source": "NOAA GFS total cloud cover",
+  "attemptedAt": "2026-10-11T05:42:16.419503Z",
+  "fetchedAt": "2026-10-11T05:42:16.419503Z",
+  "validAt": "2026-10-11T00:00:00Z",
+  "modelCycle": "20261011T00Z",
+  "forecastHour": 0,
+  "width": 1024,
+  "height": 512,
+  "message": "Seamless global cloud coverage updated successfully."
+}

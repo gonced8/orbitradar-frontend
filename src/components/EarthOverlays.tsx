@@ -129,10 +129,10 @@ export const EarthOverlays = ({
 float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
-// Soften the published raster slightly so its finite resolution does not
-// dominate the globe at close zoom. The cross kernel preserves broad fronts
+// Soften the published raster so its finite resolution does not dominate the
+// globe at close zoom. A slightly wider cross kernel preserves broad fronts
 // while smoothing individual coverage pixels.
-vec2 orbitradarCloudBlurOffset = orbitradarCloudTexelSize * 1.25;
+vec2 orbitradarCloudBlurOffset = orbitradarCloudTexelSize * 2.5;
 vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv) * 0.4;
 orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv + vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;
 orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv - vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;

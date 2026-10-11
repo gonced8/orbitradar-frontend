@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "@testing-library/react";
 import * as THREE from "three";
@@ -7,6 +7,21 @@ import EarthOverlays from "../../components/EarthOverlays";
 import { getSunDirection } from "../../utils/solar";
 
 describe("Earth solar geometry", () => {
+  const createGlobe = () => {
+    const scene = new THREE.Scene();
+    const material = new THREE.MeshPhongMaterial();
+    const earth = new THREE.Mesh(
+      new THREE.SphereGeometry(100),
+      material,
+    ) as THREE.Mesh & { __globeObjType?: string };
+    earth.__globeObjType = "globe";
+    scene.add(earth);
+    return {
+      scene: () => scene,
+      getGlobeRadius: () => 100,
+    } as unknown as GlobeMethods;
+  };
+
   it("applies night shading to the globe material without an overlay sphere", () => {
     const scene = new THREE.Scene();
     const material = new THREE.MeshPhongMaterial();
@@ -65,5 +80,51 @@ describe("Earth solar geometry", () => {
     expect(noon.x).toBeCloseTo(-midnight.x, 2);
     expect(noon.z).toBeCloseTo(-midnight.z, 2);
     expect(noon.dot(midnight)).toBeLessThan(-0.65);
+  });
+
+  it("keeps one solar animation loop when the time getter identity changes", () => {
+    const requestAnimationFrame = vi.fn(() => 1);
+    const cancelAnimationFrame = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
+
+    const globe = createGlobe();
+    const firstGetter = () => new Date("2024-03-20T12:00:00Z");
+    const secondGetter = () => new Date("2024-03-20T12:00:01Z");
+    const view = render(
+      React.createElement(EarthOverlays, {
+        globe,
+        time: new Date("2024-03-20T12:00:00Z"),
+        getTime: firstGetter,
+        nightEnabled: true,
+        cloudsEnabled: false,
+      }),
+    );
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    view.rerender(
+      React.createElement(EarthOverlays, {
+        globe,
+        time: new Date("2024-03-20T12:00:01Z"),
+        getTime: secondGetter,
+        nightEnabled: true,
+        cloudsEnabled: false,
+      }),
+    );
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(cancelAnimationFrame).not.toHaveBeenCalled();
+
+    view.rerender(
+      React.createElement(EarthOverlays, {
+        globe,
+        time: new Date("2024-03-20T12:00:01Z"),
+        nightEnabled: true,
+        cloudsEnabled: false,
+      }),
+    );
+    expect(cancelAnimationFrame).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(cancelAnimationFrame).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });

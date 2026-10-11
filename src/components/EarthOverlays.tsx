@@ -65,6 +65,7 @@ export const EarthOverlays = ({
   const sunRef = useRef(sun);
   const timeRef = useRef(time);
   const getTimeRef = useRef(getTime);
+  const hasTimeGetter = Boolean(getTime);
   const nightEnabledRef = useRef(nightEnabled);
   sunRef.current = sun;
   timeRef.current = time;
@@ -189,7 +190,8 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
   }, [nightEnabled, sun]);
 
   useEffect(() => {
-    if (!getTime || typeof window.requestAnimationFrame !== "function") return;
+    if (!hasTimeGetter || typeof window.requestAnimationFrame !== "function")
+      return;
     let frame = 0;
     const updateSun = () => {
       const simulatedTime = getTimeRef.current?.() ?? timeRef.current;
@@ -202,7 +204,7 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
     };
     frame = window.requestAnimationFrame(updateSun);
     return () => window.cancelAnimationFrame(frame);
-  }, [getTime]);
+  }, [hasTimeGetter]);
 
   useEffect(() => {
     const clearCloudTexture = () => {

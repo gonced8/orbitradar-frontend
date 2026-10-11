@@ -8,6 +8,7 @@ import {
 import { propagateOrbit, propagatePosition } from "../utils/propagation";
 
 const POSITION_TICK_MS = 1000;
+const EMPTY_ORBIT_POINTS: OrbitPoint[] = [];
 
 export const useSatellitePositions = (
   trackedSatellites: SatelliteCatalogEntry[],
@@ -282,7 +283,7 @@ export const useSatellitePositions = (
     satellitePositions,
     selectedPosition,
     snapshotVersion,
-    orbitPoints: showOrbit ? orbitPoints : [],
+    orbitPoints: showOrbit ? orbitPoints : EMPTY_ORBIT_POINTS,
     showOrbit,
     setShowOrbit,
     followSelected,

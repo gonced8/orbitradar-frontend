@@ -55,6 +55,7 @@ export const EarthOverlays = ({
     map: { value: emptyCloudTexture as THREE.Texture },
     enabled: { value: 0 },
     opacity: { value: CLOUD_OPACITY },
+    texelSize: { value: new THREE.Vector2(1 / 1024, 1 / 512) },
   });
   const cloudTextureRef = useRef<THREE.Texture | null>(null);
   const timeMs = time.getTime();
@@ -107,6 +108,7 @@ export const EarthOverlays = ({
       shader.uniforms.orbitradarCloudMap = cloudUniforms.map;
       shader.uniforms.orbitradarCloudEnabled = cloudUniforms.enabled;
       shader.uniforms.orbitradarCloudOpacity = cloudUniforms.opacity;
+      shader.uniforms.orbitradarCloudTexelSize = cloudUniforms.texelSize;
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
@@ -119,7 +121,7 @@ export const EarthOverlays = ({
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;\nuniform sampler2D orbitradarCloudMap;\nuniform float orbitradarCloudEnabled;\nuniform float orbitradarCloudOpacity;",
+          "#include <common>\nvarying vec3 orbitradarSurfaceNormal;\nuniform vec3 orbitradarSunDirection;\nuniform float orbitradarNightEnabled;\nuniform sampler2D orbitradarCloudMap;\nuniform float orbitradarCloudEnabled;\nuniform float orbitradarCloudOpacity;\nuniform vec2 orbitradarCloudTexelSize;",
         )
         .replace(
           "#include <opaque_fragment>",
@@ -127,7 +129,15 @@ export const EarthOverlays = ({
 float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
-vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv);
+// Soften the published raster slightly so its finite resolution does not
+// dominate the globe at close zoom. The cross kernel preserves broad fronts
+// while smoothing individual coverage pixels.
+vec2 orbitradarCloudBlurOffset = orbitradarCloudTexelSize * 1.25;
+vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv) * 0.4;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv + vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv - vec2(orbitradarCloudBlurOffset.x, 0.0)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv + vec2(0.0, orbitradarCloudBlurOffset.y)) * 0.15;
+orbitradarCloudSample += texture2D(orbitradarCloudMap, vMapUv - vec2(0.0, orbitradarCloudBlurOffset.y)) * 0.15;
 // The NOAA field is total coverage, not cloud albedo. Decode its deliberately
 // softened alpha back into a coverage estimate, then let solar illumination
 // determine the visible cloud brightness.
@@ -210,6 +220,13 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
           globe.renderer().capabilities.getMaxAnisotropy(),
         );
         texture.needsUpdate = true;
+        const image = texture.image as { width?: number; height?: number };
+        if (image.width && image.height) {
+          cloudUniformsRef.current.texelSize.value.set(
+            1 / image.width,
+            1 / image.height,
+          );
+        }
         const previousTexture = cloudTextureRef.current;
         cloudTextureRef.current = texture;
         cloudUniformsRef.current.map.value = texture;

@@ -31,6 +31,8 @@ import { getGlobePixelRatio } from "../utils/satelliteMarkerScale";
 import EarthOverlays from "./EarthOverlays";
 import { listenForWebglContextLoss } from "../utils/globeContext";
 import LocalClock from "./LocalClock";
+import DataFreshness from "./DataFreshness";
+import { useDataFreshness } from "../hooks/useDataFreshness";
 
 const SEARCH_RESULT_LIMIT = 12;
 const CATALOG_PAGE_SIZE = 50;
@@ -102,11 +104,12 @@ const World: React.FC = () => {
     selectedNoradId,
     isLoading,
     statusMessage,
-    lastUpdated,
+    sourceUpdatedAt,
     selectSatellite,
     clearSelection,
     refreshCatalog,
   } = useSatelliteCatalog(settings);
+  const dataFreshness = useDataFreshness(sourceUpdatedAt);
 
   const timeLapse = useTimeLapse();
   const {
@@ -439,6 +442,7 @@ const World: React.FC = () => {
                   getTime={timeLapse.getEffectiveTime}
                   nightEnabled={settings.nightShading ?? true}
                   cloudsEnabled={settings.cloudCover ?? true}
+                  cloudVersion={dataFreshness.cloudVersion}
                 />
               )}
               {globeReady && (
@@ -490,14 +494,14 @@ const World: React.FC = () => {
                 Open panel
               </button>
             </div>
+            <DataFreshness
+              satellite={dataFreshness.satellite}
+              cloud={dataFreshness.cloud}
+              compact
+            />
             <p className="mt-2 hidden line-clamp-2 text-sm text-slate-400 sm:block">
               {statusMessage}
             </p>
-            {lastUpdated && (
-              <p className="mt-1 hidden text-xs text-slate-500 sm:block">
-                Last updated: {new Date(lastUpdated).toLocaleString()}
-              </p>
-            )}
             <p className="mt-1 hidden text-xs text-slate-500 sm:block">
               Orbital data:{" "}
               <a
@@ -823,11 +827,10 @@ const World: React.FC = () => {
               {locationError}
             </p>
           )}
-          {lastUpdated && (
-            <p className="mt-1 text-xs text-slate-500">
-              Last updated: {new Date(lastUpdated).toLocaleString()}
-            </p>
-          )}
+          <DataFreshness
+            satellite={dataFreshness.satellite}
+            cloud={dataFreshness.cloud}
+          />
           <p className="mt-1 text-xs text-slate-500">
             Orbital data:{" "}
             <a

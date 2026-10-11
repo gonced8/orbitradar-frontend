@@ -51,6 +51,7 @@ export const useSatelliteCatalog = (
     "Loading the shared satellite catalog...",
   );
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
   const refreshInProgressRef = useRef(false);
 
   const applyCatalog = useCallback(
@@ -69,17 +70,14 @@ export const useSatelliteCatalog = (
           : (tracked[0]?.noradId ?? null);
       });
       let cachedAt: string | null = null;
+      const sourceUpdatedAt = sourceTimestamp ?? readCacheSourceTimestamp();
       try {
         cachedAt = localStorage.getItem(SATELLITE_CACHE_TIMESTAMP_KEY);
       } catch {
         /* Storage can be disabled. */
       }
-      setLastUpdated(
-        sourceTimestamp ??
-          readCacheSourceTimestamp() ??
-          cachedAt ??
-          new Date().toISOString(),
-      );
+      setSourceUpdatedAt(sourceUpdatedAt);
+      setLastUpdated(sourceUpdatedAt ?? cachedAt ?? new Date().toISOString());
     },
     [],
   );
@@ -189,6 +187,7 @@ export const useSatelliteCatalog = (
     isLoading,
     statusMessage,
     lastUpdated,
+    sourceUpdatedAt,
     getSelectedSatellite,
     selectSatellite,
     clearSelection,

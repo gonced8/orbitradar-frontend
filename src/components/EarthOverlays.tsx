@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { getSunDirection } from "../utils/solar";
@@ -9,6 +9,7 @@ type Props = {
   getTime?: () => Date;
   nightEnabled: boolean;
   cloudsEnabled: boolean;
+  cloudVersion?: string;
 };
 
 const cloudImageUrl = () => {
@@ -21,7 +22,6 @@ const cloudImageUrl = () => {
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
 const CLOUD_OPACITY = 0.35;
-const CLOUD_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()
@@ -33,6 +33,7 @@ export const EarthOverlays = ({
   getTime,
   nightEnabled,
   cloudsEnabled,
+  cloudVersion = "",
 }: Props) => {
   const emptyCloudTexture = useMemo(() => {
     const texture = new THREE.DataTexture(
@@ -54,12 +55,11 @@ export const EarthOverlays = ({
     opacity: { value: CLOUD_OPACITY },
   });
   const cloudTextureRef = useRef<THREE.Texture | null>(null);
-  const [cloudVersion, setCloudVersion] = useState("");
   const timeMs = time.getTime();
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
   const cloudUrl = useMemo(() => {
     const url = cloudImageUrl();
-    if (!cloudVersion) return url;
+    if (!cloudVersion || import.meta.env.VITE_CLOUD_IMAGE_URL) return url;
     return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cloudVersion)}`;
   }, [cloudVersion]);
   const sunRef = useRef(sun);
@@ -71,46 +71,6 @@ export const EarthOverlays = ({
   timeRef.current = time;
   getTimeRef.current = getTime;
   nightEnabledRef.current = nightEnabled;
-
-  useEffect(() => {
-    if (!cloudsEnabled || import.meta.env.VITE_CLOUD_IMAGE_URL) return;
-    let cancelled = false;
-    const refreshVersion = async () => {
-      try {
-        const response = await fetch(
-          `${import.meta.env.BASE_URL}data/cloud-status.json`,
-          { cache: "no-cache" },
-        );
-        if (!response.ok) return;
-        const status = (await response.json()) as {
-          state?: string;
-          sourceId?: string;
-          fetchedAt?: string;
-        };
-        if (cancelled) return;
-        const compatible =
-          (status.state === "ready" || status.state === "stale") &&
-          status.sourceId === "noaa-gfs-tcc" &&
-          Boolean(status.fetchedAt);
-        // The status document is only a cache-busting hint. Keep trying the
-        // published image if this small document is stale or unavailable.
-        setCloudVersion(compatible && status.fetchedAt ? status.fetchedAt : "");
-      } catch {
-        // Retain the current texture while the publisher status is unavailable.
-      }
-    };
-    const onVisibilityChange = () => {
-      if (!document.hidden) void refreshVersion();
-    };
-    void refreshVersion();
-    const timer = window.setInterval(refreshVersion, CLOUD_STATUS_REFRESH_MS);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [cloudsEnabled]);
 
   useEffect(() => {
     if (!globe) return;

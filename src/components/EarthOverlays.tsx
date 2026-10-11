@@ -59,7 +59,7 @@ export const EarthOverlays = ({
   const sun = useMemo(() => getSunDirection(new Date(timeMs)), [timeMs]);
   const cloudUrl = useMemo(() => {
     const url = cloudImageUrl();
-    if (!cloudVersion || import.meta.env.VITE_CLOUD_IMAGE_URL) return url;
+    if (!cloudVersion) return url;
     return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(cloudVersion)}`;
   }, [cloudVersion]);
   const sunRef = useRef(sun);

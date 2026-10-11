@@ -126,9 +126,16 @@ float orbitradarDay = smoothstep(-0.22, 0.12, orbitradarDaylight);
 vec3 orbitradarNightColor = outgoingLight * vec3(0.04, 0.07, 0.16);
 outgoingLight = mix(outgoingLight, mix(orbitradarNightColor, outgoingLight, orbitradarDay), orbitradarNightEnabled);
 vec4 orbitradarCloudSample = texture2D(orbitradarCloudMap, vMapUv);
-vec3 orbitradarCloudNightColor = vec3(0.12, 0.16, 0.26);
-vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, vec3(1.0), mix(1.0, orbitradarDay, orbitradarNightEnabled));
-float orbitradarCloudAlpha = orbitradarCloudSample.a * orbitradarCloudOpacity * orbitradarCloudEnabled;
+// The NOAA field is total coverage, not cloud albedo. Decode its deliberately
+// softened alpha back into a coverage estimate, then let solar illumination
+// determine the visible cloud brightness.
+float orbitradarCloudCoverage = clamp(pow(orbitradarCloudSample.a / 0.824, 0.82), 0.0, 1.0);
+float orbitradarCloudDensity = smoothstep(0.08, 0.92, orbitradarCloudCoverage);
+vec3 orbitradarCloudNightColor = vec3(0.025, 0.04, 0.075);
+vec3 orbitradarCloudDayColor = vec3(1.0, 1.0, 0.98);
+float orbitradarCloudSunlight = smoothstep(-0.16, 0.24, orbitradarDaylight);
+vec3 orbitradarCloudColor = mix(orbitradarCloudNightColor, orbitradarCloudDayColor, mix(1.0, orbitradarCloudSunlight, orbitradarNightEnabled));
+float orbitradarCloudAlpha = orbitradarCloudDensity * orbitradarCloudOpacity * orbitradarCloudEnabled;
 outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
 #include <opaque_fragment>`,
         );
@@ -201,10 +208,15 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
           globe.renderer().capabilities.getMaxAnisotropy(),
         );
         texture.needsUpdate = true;
-        if (cloudTextureRef.current) cloudTextureRef.current.dispose();
+        const previousTexture = cloudTextureRef.current;
         cloudTextureRef.current = texture;
         cloudUniformsRef.current.map.value = texture;
         cloudUniformsRef.current.enabled.value = 1;
+        if (previousTexture) {
+          if (typeof window.requestAnimationFrame === "function")
+            window.requestAnimationFrame(() => previousTexture.dispose());
+          else previousTexture.dispose();
+        }
       },
       undefined,
       () => {
@@ -212,17 +224,19 @@ outgoingLight = mix(outgoingLight, orbitradarCloudColor, orbitradarCloudAlpha);
       },
     );
     return () => {
+      // Keep the previous texture bound while a replacement is loading. A
+      // failed refresh therefore leaves the last valid weather image visible.
       cancelled = true;
-      clearCloudTexture();
     };
   }, [globe, cloudsEnabled, cloudUrl, emptyCloudTexture]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
+      cloudTextureRef.current?.dispose();
+      cloudTextureRef.current = null;
       emptyCloudTexture.dispose();
-    },
-    [emptyCloudTexture],
-  );
+    };
+  }, [emptyCloudTexture]);
 
   return null;
 };

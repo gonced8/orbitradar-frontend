@@ -19,7 +19,16 @@ describe("SatelliteMarkers", () => {
       renderer: () => ({ domElement: canvas }),
       camera: () => new THREE.PerspectiveCamera(),
       getGlobeRadius: () => 100,
-      getCoords: (lat: number) => ({ x: 101, y: lat, z: 0 }),
+      getCoords: (lat: number, lng: number, altitude = 0) => {
+        const phi = ((90 - lat) * Math.PI) / 180;
+        const theta = ((90 - lng) * Math.PI) / 180;
+        const radius = 100 * (1 + altitude);
+        return {
+          x: radius * Math.sin(phi) * Math.cos(theta),
+          y: radius * Math.cos(phi),
+          z: radius * Math.sin(phi) * Math.sin(theta),
+        };
+      },
     } as unknown as GlobeMethods;
   };
 
@@ -83,14 +92,14 @@ describe("SatelliteMarkers", () => {
     expect(catalogColor.getHex()).toBe(0x00f0ff);
 
     const targetPositions = currentMesh.geometry.getAttribute(
-      "instanceTargetPosition",
+      "instanceTargetPosition0",
     );
-    expect(targetPositions).toBeInstanceOf(THREE.InstancedBufferAttribute);
-    expect(targetPositions.getX(0)).toBe(101);
+    expect(targetPositions).toBeInstanceOf(THREE.InterleavedBufferAttribute);
+    expect(targetPositions.getX(0)).toBeCloseTo(0);
     const startPositions = currentMesh.geometry.getAttribute(
-      "instanceStartPosition",
+      "instanceStartPosition0",
     );
-    expect(startPositions).toBeInstanceOf(THREE.InstancedBufferAttribute);
+    expect(startPositions).toBeInstanceOf(THREE.InterleavedBufferAttribute);
 
     const setMatrixAt = vi.spyOn(currentMesh, "setMatrixAt");
     const setColorAt = vi.spyOn(currentMesh, "setColorAt");
@@ -106,7 +115,8 @@ describe("SatelliteMarkers", () => {
       {} as THREE.WebGLRenderer,
     );
     expect(shader.uniforms.markerInterpolation).toBeDefined();
-    expect(shader.vertexShader).toContain("instanceTargetPosition");
+    expect(shader.uniforms.markerBufferIndex).toBeDefined();
+    expect(shader.vertexShader).toContain("instanceTargetPosition0");
     expect(shader.vertexShader).toContain("markerDirection");
 
     const movedPositions = positions.map((position, index) =>
@@ -123,7 +133,14 @@ describe("SatelliteMarkers", () => {
         onSelect={vi.fn()}
       />,
     );
-    await waitFor(() => expect(targetPositions.getY(0)).toBe(10));
+    const nextTargetPositions = currentMesh.geometry.getAttribute(
+      "instanceTargetPosition1",
+    );
+    await waitFor(() =>
+      expect(nextTargetPositions.getY(0)).toBeCloseTo(
+        105 * Math.cos((80 * Math.PI) / 180),
+      ),
+    );
     expect(setMatrixAt).not.toHaveBeenCalled();
     expect(setColorAt).not.toHaveBeenCalled();
     const startMatrix = new THREE.Matrix4();
@@ -177,9 +194,9 @@ describe("SatelliteMarkers", () => {
       await waitFor(() =>
         expect(
           addedMeshes[0]?.geometry
-            .getAttribute("instanceTargetPosition")
+            .getAttribute("instanceTargetPosition1")
             .getY(0),
-        ).toBe(10),
+        ).toBeCloseTo(105 * Math.cos((80 * Math.PI) / 180)),
       );
 
       now.mockReturnValue(600);
@@ -197,10 +214,15 @@ describe("SatelliteMarkers", () => {
       await waitFor(() =>
         expect(
           addedMeshes[0]?.geometry
-            .getAttribute("instanceTargetPosition")
+            .getAttribute("instanceTargetPosition0")
             .getY(0),
-        ).toBe(10),
+        ).toBeCloseTo(105 * Math.cos((80 * Math.PI) / 180)),
       );
+      expect(
+        addedMeshes[0]?.geometry
+          .getAttribute("instanceTargetPosition1")
+          .getY(0),
+      ).toBeCloseTo(105 * Math.cos((80 * Math.PI) / 180));
       const matrix = new THREE.Matrix4();
       addedMeshes[0]?.getMatrixAt(0, matrix);
       expect(new THREE.Vector3().setFromMatrixPosition(matrix).y).toBeCloseTo(

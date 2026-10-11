@@ -59,6 +59,9 @@ describe("Earth solar geometry", () => {
     );
     expect(shader.uniforms).toHaveProperty("orbitradarCloudMap");
     expect(shader.fragmentShader).toContain("orbitradarCloudSample");
+    expect(shader.fragmentShader).toContain("orbitradarCloudCoverage");
+    expect(shader.fragmentShader).toContain("orbitradarCloudSunlight");
+    expect(shader.fragmentShader).toContain("vec3(0.025, 0.04, 0.075)");
     view.unmount();
     expect(material.customProgramCacheKey()).not.toContain(
       "orbitradar-cloud-surface-v3",

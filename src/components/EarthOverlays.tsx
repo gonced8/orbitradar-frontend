@@ -21,7 +21,9 @@ const cloudImageUrl = () => {
 // its coordinate system. Keep the same rotation when transforming the sun
 // direction used by the globe shader.
 const GLOBE_TEXTURE_ROTATION_Y = -Math.PI / 2;
-const CLOUD_OPACITY = 0.35;
+// Keep the coverage layer translucent so the underlying land and ocean
+// textures remain visible beneath dense daytime cloud fields.
+const CLOUD_OPACITY = 0.18;
 const toOverlayDirection = (direction: THREE.Vector3) =>
   direction
     .clone()

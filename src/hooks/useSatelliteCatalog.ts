@@ -14,24 +14,58 @@ import {
   SATELLITE_CACHE_TIMESTAMP_KEY,
   isCacheFresh,
 } from "../utils/cache";
+import type { PublisherState } from "../utils/dataFreshness";
 
-const CATALOG_URL = import.meta.env.VITE_CATALOG_URL ?? "/data/catalog.json";
-const CATALOG_STATUS_URL = "/data/catalog-status.json";
+const CUSTOM_CATALOG_URL = import.meta.env.VITE_CATALOG_URL as
+  string | undefined;
+const CATALOG_URL =
+  CUSTOM_CATALOG_URL ?? `${import.meta.env.BASE_URL}data/catalog.json`;
+const CATALOG_STATUS_URL =
+  (import.meta.env.VITE_CATALOG_STATUS_URL as string | undefined) ??
+  (CUSTOM_CATALOG_URL
+    ? ""
+    : `${import.meta.env.BASE_URL}data/catalog-status.json`);
+const PUBLISHER_STATUS_REFRESH_MS = 60 * 60 * 1000;
 const DEFAULT_NORAD_ID = 25544;
 
-type CatalogPublisherStatus = {
-  state?: "ready" | "paused" | "error";
+export type CatalogPublisherStatus = {
+  state?: PublisherState;
   message?: string;
   retryAt?: string | null;
   manualProbeRequired?: boolean;
+  fetchedAt?: string | null;
 };
+
+const normalizePublisherState = (value: unknown): PublisherState | undefined =>
+  value === "ready" ||
+  value === "paused" ||
+  value === "error" ||
+  value === "stale"
+    ? value
+    : undefined;
 
 const readPublisherStatus =
   async (): Promise<CatalogPublisherStatus | null> => {
+    if (!CATALOG_STATUS_URL) return null;
     try {
       const response = await fetch(CATALOG_STATUS_URL, { cache: "no-cache" });
       if (!response.ok) return null;
-      return (await response.json()) as CatalogPublisherStatus;
+      const value = (await response.json()) as Record<string, unknown>;
+      if (!value || typeof value !== "object") return null;
+      return {
+        state: normalizePublisherState(value.state),
+        message: typeof value.message === "string" ? value.message : undefined,
+        retryAt: typeof value.retryAt === "string" ? value.retryAt : null,
+        manualProbeRequired:
+          typeof value.manualProbeRequired === "boolean"
+            ? value.manualProbeRequired
+            : undefined,
+        fetchedAt:
+          typeof value.fetchedAt === "string" &&
+          !Number.isNaN(Date.parse(value.fetchedAt))
+            ? value.fetchedAt
+            : null,
+      };
     } catch {
       return null;
     }
@@ -52,6 +86,8 @@ export const useSatelliteCatalog = (
   );
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
+  const [publisherStatus, setPublisherStatus] =
+    useState<CatalogPublisherStatus | null>(null);
   const refreshInProgressRef = useRef(false);
 
   const applyCatalog = useCallback(
@@ -95,6 +131,7 @@ export const useSatelliteCatalog = (
         readPublisherStatus(),
       ]);
       publisherStatus = status;
+      if (status) setPublisherStatus(status);
       if (!response.ok)
         throw new Error(`Shared catalog request failed (${response.status}).`);
       const parsed = parseOmmCatalogSnapshot(
@@ -167,6 +204,27 @@ export const useSatelliteCatalog = (
     return () => window.clearInterval(timeout);
   }, [refreshCatalog, settings?.autoRefresh, settings?.refreshIntervalHours]);
 
+  useEffect(() => {
+    if (!CATALOG_STATUS_URL) return;
+    const refreshStatus = () => {
+      void readPublisherStatus().then((status) => {
+        if (status) setPublisherStatus(status);
+      });
+    };
+    const interval = window.setInterval(
+      refreshStatus,
+      PUBLISHER_STATUS_REFRESH_MS,
+    );
+    const onVisibilityChange = () => {
+      if (!document.hidden) refreshStatus();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   const getSelectedSatellite = useCallback((): SatelliteCatalogEntry | null => {
     return (
       trackedSatellites.find((item) => item.noradId === selectedNoradId) ?? null
@@ -188,6 +246,7 @@ export const useSatelliteCatalog = (
     statusMessage,
     lastUpdated,
     sourceUpdatedAt,
+    publisherStatus,
     getSelectedSatellite,
     selectSatellite,
     clearSelection,

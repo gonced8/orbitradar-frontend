@@ -48,6 +48,7 @@ describe("useSatelliteCatalog", () => {
     );
     expect(result.current.trackedSatellites[0].noradId).toBe(25544);
     expect(result.current.sourceUpdatedAt).toBe(snapshot.fetchedAt);
+    expect(result.current.publisherStatus?.state).toBe("ready");
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "/data/catalog.json",
       "/data/catalog-status.json",

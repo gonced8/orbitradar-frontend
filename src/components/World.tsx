@@ -105,11 +105,12 @@ const World: React.FC = () => {
     isLoading,
     statusMessage,
     sourceUpdatedAt,
+    publisherStatus,
     selectSatellite,
     clearSelection,
     refreshCatalog,
   } = useSatelliteCatalog(settings);
-  const dataFreshness = useDataFreshness(sourceUpdatedAt);
+  const dataFreshness = useDataFreshness(sourceUpdatedAt, publisherStatus);
 
   const timeLapse = useTimeLapse();
   const {

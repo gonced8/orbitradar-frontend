@@ -4,16 +4,19 @@ import {
   FreshnessStatus,
   PublisherState,
 } from "../utils/dataFreshness";
+import type { CatalogPublisherStatus } from "./useSatelliteCatalog";
 
-const STATUS_REFRESH_MS = 60 * 60 * 1000;
+const CLOUD_STATUS_REFRESH_MS = 60 * 60 * 1000;
 const AGE_REFRESH_MS = 60 * 1000;
-const CATALOG_STATUS_URL = `${import.meta.env.BASE_URL}data/catalog-status.json`;
-const CLOUD_STATUS_URL = `${import.meta.env.BASE_URL}data/cloud-status.json`;
-
-type CatalogStatus = {
-  state?: PublisherState;
-  fetchedAt?: string | null;
-};
+const CUSTOM_CLOUD_IMAGE_URL = import.meta.env.VITE_CLOUD_IMAGE_URL as
+  string | undefined;
+const CUSTOM_CLOUD_STATUS_URL = import.meta.env.VITE_CLOUD_STATUS_URL as
+  string | undefined;
+const CLOUD_STATUS_URL =
+  CUSTOM_CLOUD_STATUS_URL ??
+  (CUSTOM_CLOUD_IMAGE_URL
+    ? ""
+    : `${import.meta.env.BASE_URL}data/cloud-status.json`);
 
 type CloudStatus = {
   state?: PublisherState;
@@ -34,22 +37,16 @@ const normalizeState = (value: unknown): PublisherState | undefined =>
 const normalizeTimestamp = (value: unknown): string | null =>
   typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
 
-const parseCatalogStatus = (value: unknown): CatalogStatus | null => {
+const parseCloudStatus = (
+  value: unknown,
+  allowCustomSource: boolean,
+): CloudStatus | null => {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
+  if (!allowCustomSource && record.sourceId !== "noaa-gfs-tcc") return null;
   return {
     state: normalizeState(record.state),
-    fetchedAt: normalizeTimestamp(record.fetchedAt),
-  };
-};
-
-const parseCloudStatus = (value: unknown): CloudStatus | null => {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  if (record.sourceId !== "noaa-gfs-tcc") return null;
-  return {
-    state: normalizeState(record.state),
-    sourceId: record.sourceId,
+    sourceId: typeof record.sourceId === "string" ? record.sourceId : undefined,
     fetchedAt: normalizeTimestamp(record.fetchedAt),
     validAt: normalizeTimestamp(record.validAt),
     modelCycle:
@@ -58,6 +55,7 @@ const parseCloudStatus = (value: unknown): CloudStatus | null => {
 };
 
 const readJson = async (url: string): Promise<unknown | null> => {
+  if (!url) return null;
   try {
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) return null;
@@ -75,27 +73,27 @@ export type DataFreshness = {
 
 export const useDataFreshness = (
   satelliteSourceTimestamp: string | null,
+  catalogStatus: CatalogPublisherStatus | null = null,
 ): DataFreshness => {
-  const [catalogStatus, setCatalogStatus] = useState<CatalogStatus | null>(
-    null,
-  );
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const refreshStatuses = useCallback(async () => {
-    const [catalogResponse, cloudResponse] = await Promise.all([
-      readJson(CATALOG_STATUS_URL),
-      readJson(CLOUD_STATUS_URL),
-    ]);
-    const catalog = parseCatalogStatus(catalogResponse);
-    const cloud = parseCloudStatus(cloudResponse);
-    if (catalog) setCatalogStatus(catalog);
+    const cloudResponse = await readJson(CLOUD_STATUS_URL);
+    const cloud = parseCloudStatus(
+      cloudResponse,
+      Boolean(CUSTOM_CLOUD_STATUS_URL),
+    );
     if (cloud) setCloudStatus(cloud);
   }, []);
 
   useEffect(() => {
+    if (!CLOUD_STATUS_URL) return;
     void refreshStatuses();
-    const interval = window.setInterval(refreshStatuses, STATUS_REFRESH_MS);
+    const interval = window.setInterval(
+      refreshStatuses,
+      CLOUD_STATUS_REFRESH_MS,
+    );
     const onVisibilityChange = () => {
       if (!document.hidden) void refreshStatuses();
     };

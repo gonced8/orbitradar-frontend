@@ -46,7 +46,6 @@ export const DataFreshness: React.FC<Props> = ({
       <div
         aria-label="Data freshness"
         className="flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] font-semibold text-slate-300"
-        role="status"
       >
         <StatusLine name="Satellites" status={satellite} />
         <StatusLine name="Clouds" status={cloud} />

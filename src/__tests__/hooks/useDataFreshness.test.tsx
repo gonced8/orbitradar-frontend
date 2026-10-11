@@ -27,13 +27,15 @@ describe("useDataFreshness", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useDataFreshness(fetchedAt));
+    const { result } = renderHook(() =>
+      useDataFreshness(fetchedAt, { state: "ready", fetchedAt }),
+    );
     await waitFor(() => expect(result.current.cloud.level).toBe("fresh"));
 
     expect(result.current.satellite.level).toBe("fresh");
     expect(result.current.cloud.modelCycle).toBe("20261011T06Z");
     expect(result.current.cloudVersion).toBe(fetchedAt);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a valid source timestamp visible when a publisher is paused", async () => {
@@ -49,7 +51,9 @@ describe("useDataFreshness", () => {
       ),
     );
 
-    const { result } = renderHook(() => useDataFreshness(fetchedAt));
+    const { result } = renderHook(() =>
+      useDataFreshness(fetchedAt, { state: "paused", fetchedAt }),
+    );
     await waitFor(() => expect(result.current.satellite.level).toBe("stale"));
     expect(result.current.satellite.sourceTimestamp).toBe(fetchedAt);
     expect(result.current.cloud.level).toBe("unavailable");

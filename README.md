@@ -54,6 +54,8 @@ Cloud freshness uses the NOAA analysis `validAt` timestamp, rather than the time
 
 The raw publisher metadata is available from [`catalog-status.json`](https://orbitradar.goncaloraposo.com/data/catalog-status.json) and [`cloud-status.json`](https://orbitradar.goncaloraposo.com/data/cloud-status.json). The catalog status reports publisher state and snapshot `fetchedAt`; the cloud status reports publisher state, image `fetchedAt`, NOAA `validAt`, and `modelCycle`.
 
+Deployments that replace the built-in sources can set `VITE_CATALOG_URL` with an optional matching `VITE_CATALOG_STATUS_URL`, and `VITE_CLOUD_IMAGE_URL` with an optional matching `VITE_CLOUD_STATUS_URL`. Without a matching status URL, custom catalog data can still show age from its snapshot, while custom cloud imagery is reported as having unavailable freshness metadata instead of being labelled with the built-in NOAA status.
+
 ## Data source
 
 Orbital elements come from the [CelesTrak](https://celestrak.org/) active-satellite group in OMM JSON format. A scheduled GitHub Actions workflow publishes one shared snapshot to GitHub Pages; browsers read that snapshot and never query CelesTrak directly. The publisher observes CelesTrak's [GP data usage policy](https://celestrak.org/usage-policy.php), including the two-hour update cadence.

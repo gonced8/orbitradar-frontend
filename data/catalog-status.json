@@ -1,1 +1,1 @@
-{"schemaVersion":1,"state":"error","attemptedAt":"2026-10-17T22:16:48.814Z","fetchedAt":"2026-10-17T19:22:41.874Z","retryAt":"2026-10-18T02:16:48.814Z","recordCount":16754,"manualProbeRequired":false,"message":"Catalog source could not be reached; the last valid snapshot is retained."}
+{"schemaVersion":1,"state":"ready","attemptedAt":"2026-10-18T04:28:09.650Z","fetchedAt":"2026-10-18T04:28:09.650Z","retryAt":null,"recordCount":16755,"manualProbeRequired":false,"message":"Shared satellite catalog updated successfully."}

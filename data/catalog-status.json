@@ -1,1 +1,1 @@
-{"schemaVersion":1,"state":"ready","attemptedAt":"2026-10-22T15:15:46.788Z","fetchedAt":"2026-10-22T15:15:46.788Z","retryAt":null,"recordCount":16765,"manualProbeRequired":false,"message":"Shared satellite catalog updated successfully."}
+{"schemaVersion":1,"state":"paused","attemptedAt":"2026-10-22T19:14:23.472Z","fetchedAt":"2026-10-22T15:15:46.788Z","retryAt":"2026-10-22T23:14:23.472Z","recordCount":16765,"manualProbeRequired":true,"message":"CelesTrak returned HTTP 403. Automatic requests are paused; an operator probe is required."}
